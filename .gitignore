@@ -1,0 +1,6 @@
+vendor/
+.DS_Store
+node_modules/
+*.meshy
+*.glb
+mem_after.bin

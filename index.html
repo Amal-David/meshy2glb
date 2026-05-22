@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>meshy2glb — local .meshy viewer</title>
+<style>
+  html, body { margin: 0; padding: 0; overflow: hidden; background: #111; color: #eee;
+               font: 13px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; }
+  canvas { display: block; }
+
+  #status {
+    position: fixed; top: 12px; left: 12px; z-index: 10;
+    background: rgba(0,0,0,.6); padding: 10px 14px; border-radius: 8px;
+    max-width: 520px;
+  }
+  #status.ok   { color: #6fdc8c; }
+  #status.err  { color: #ff8a8a; white-space: pre-wrap; }
+  #status.work { color: #ffd166; }
+  #status a    { color: #aef; }
+
+  #drop {
+    position: fixed; inset: 0;
+    background: rgba(50,90,200,.25);
+    border: 4px dashed #6aa;
+    display: none; align-items: center; justify-content: center;
+    font-size: 22px; color: #fff; z-index: 20;
+    pointer-events: none;
+  }
+  #drop.show { display: flex; }
+
+  #empty {
+    position: fixed; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 8px;
+    color: #888; text-align: center; pointer-events: none;
+  }
+  #empty.hide { display: none; }
+  #empty .big { font-size: 22px; color: #ccc; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.169.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.169.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+
+<div id="status" class="work">booting…</div>
+<div id="drop">drop a .meshy file to decrypt &amp; view</div>
+<div id="empty">
+  <div class="big">drop a <code>.meshy</code> file anywhere</div>
+  <div>or a <code>.glb</code> to skip decryption</div>
+</div>
+
+<script type="module">
+import { MeshyDecryptor, isMeshyFile, isGlbFile } from './src/decrypt.js';
+import { Viewer } from './src/viewer.js';
+
+const $status = document.getElementById('status');
+const $drop   = document.getElementById('drop');
+const $empty  = document.getElementById('empty');
+
+const setStatus = (html, cls = 'work') => {
+  $status.className = cls;
+  $status.innerHTML = html;
+  console.log('[meshy2glb]', html.replace(/<[^>]+>/g, ''));
+};
+
+const viewer    = new Viewer();
+const decryptor = new MeshyDecryptor({ onStatus: (m) => setStatus(m) });
+
+async function handleBuffer(name, buffer) {
+  $empty.classList.add('hide');
+  const sizeMb = (buffer.byteLength / 1024 / 1024).toFixed(2);
+
+  let glb;
+  if (isGlbFile(buffer)) {
+    setStatus(`${name} is already a .glb — rendering directly (${sizeMb} MB)`);
+    glb = buffer;
+  } else if (isMeshyFile(buffer)) {
+    setStatus(`decrypting ${name} (${sizeMb} MB)…`);
+    glb = await decryptor.meshyToGlb(buffer);
+  } else {
+    throw new Error('not a .meshy or .glb file');
+  }
+
+  const { blobUrl, triangles } = await viewer.loadGLB(glb);
+  const glbMb = (glb.byteLength / 1024 / 1024).toFixed(2);
+  setStatus(
+    `&#10003; ${name} &mdash; ${glbMb} MB GLB, ~${triangles.toLocaleString()} triangles ` +
+    `&middot; <a href="${blobUrl}" download="${name.replace(/\.(meshy|glb)$/i,'')}.glb">download .glb</a>`,
+    'ok'
+  );
+}
+
+async function main() {
+  try {
+    if (location.hostname !== 'localhost') {
+      setStatus(
+        `This viewer only works when served from <b>localhost</b>.\n\n` +
+        `meshy.ai's WASM rejects any other hostname. ` +
+        `If you see 127.0.0.1 or a LAN IP in the URL, change it to "localhost".`,
+        'err'
+      );
+      return;
+    }
+    await decryptor.boot();
+  } catch (e) {
+    setStatus(`error: ${e.message}`, 'err');
+    console.error(e);
+  }
+}
+main();
+
+// ── drag-and-drop ─────────────────────────────────────────────────────
+addEventListener('dragover', (e) => { e.preventDefault(); $drop.classList.add('show'); });
+addEventListener('dragleave', (e) => { if (e.target === document.body) $drop.classList.remove('show'); });
+addEventListener('drop', async (e) => {
+  e.preventDefault();
+  $drop.classList.remove('show');
+  const file = e.dataTransfer.files[0];
+  if (!file) return;
+  try {
+    const buffer = await file.arrayBuffer();
+    await handleBuffer(file.name, buffer);
+  } catch (err) {
+    setStatus(`error: ${err.message}`, 'err');
+    console.error(err);
+  }
+});
+</script>
+
+</body>
+</html>
