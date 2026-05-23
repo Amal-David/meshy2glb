@@ -47,7 +47,7 @@
 </head>
 <body>
 
-<div id="status" class="work">booting…</div>
+<div id="status" class="ok">drop a .meshy file anywhere</div>
 <div id="drop">drop a .meshy file to decrypt &amp; view</div>
 <div id="empty">
   <div class="big">drop a <code>.meshy</code> file anywhere</div>
@@ -55,7 +55,7 @@
 </div>
 
 <script type="module">
-import { MeshyDecryptor, isMeshyFile, isGlbFile } from './src/decrypt.js';
+import { meshyToGlb, isMeshyFile, isGlbFile } from './src/decrypt.js';
 import { Viewer } from './src/viewer.js';
 
 const $status = document.getElementById('status');
@@ -68,8 +68,7 @@ const setStatus = (html, cls = 'work') => {
   console.log('[meshy2glb]', html.replace(/<[^>]+>/g, ''));
 };
 
-const viewer    = new Viewer();
-const decryptor = new MeshyDecryptor({ onStatus: (m) => setStatus(m) });
+const viewer = new Viewer();
 
 async function handleBuffer(name, buffer) {
   $empty.classList.add('hide');
@@ -81,7 +80,7 @@ async function handleBuffer(name, buffer) {
     glb = buffer;
   } else if (isMeshyFile(buffer)) {
     setStatus(`decrypting ${name} (${sizeMb} MB)…`);
-    glb = await decryptor.meshyToGlb(buffer);
+    glb = await meshyToGlb(buffer);
   } else {
     throw new Error('not a .meshy or .glb file');
   }
@@ -94,25 +93,6 @@ async function handleBuffer(name, buffer) {
     'ok'
   );
 }
-
-async function main() {
-  try {
-    if (location.hostname !== 'localhost') {
-      setStatus(
-        `This viewer only works when served from <b>localhost</b>.\n\n` +
-        `meshy.ai's WASM rejects any other hostname. ` +
-        `If you see 127.0.0.1 or a LAN IP in the URL, change it to "localhost".`,
-        'err'
-      );
-      return;
-    }
-    await decryptor.boot();
-  } catch (e) {
-    setStatus(`error: ${e.message}`, 'err');
-    console.error(e);
-  }
-}
-main();
 
 // ── drag-and-drop ─────────────────────────────────────────────────────
 addEventListener('dragover', (e) => { e.preventDefault(); $drop.classList.add('show'); });

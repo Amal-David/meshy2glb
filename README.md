@@ -2,9 +2,11 @@
 
 Local browser viewer for `.meshy` files. Drop one in, get a `.glb` out.
 
-Quick personal project — pushed here so I don't lose it. Not actively maintained.
+Pure JS — no WASM bundled, no server roundtrip. The whole decoder is
+~70 lines using the browser's built-in WebCrypto API. Deploys as
+static HTML to GitHub Pages or any static host.
 
-## Run
+## Run locally
 
 ```bash
 git clone https://github.com/Amal-David/meshy2glb
@@ -14,12 +16,17 @@ cd meshy2glb
 
 Open the URL it prints, drag a `.meshy` file onto the page.
 
+## Deploy on GitHub Pages
+
+It's just static HTML/JS — push to a repo, turn on Pages from the
+repository settings (Source: `main` branch, root). No build step.
+
 Implementation notes are in [NOTES.md](./NOTES.md).
 
 ## Disclaimer
 
-Not affiliated with [meshy.ai](https://meshy.ai). Runs locally; nothing is
-uploaded.
+Not affiliated with [meshy.ai](https://meshy.ai). Runs locally;
+nothing is uploaded.
 
 ## License
 

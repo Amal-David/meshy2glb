@@ -1,107 +1,111 @@
-// Decryption pipeline for the `.meshy` container format.
+// Clean-room decoder for the `.meshy` container.
 //
-// File layout:
-//   bytes 0-7    "MESHY.AI" magic
-//   bytes 8-9    version
-//   bytes 10-21  AES-GCM nonce
-//   bytes 22-31  reserved / length
-//   bytes 32..   AES-256-GCM ciphertext
-//   last 16      GCM authentication tag
-// The decrypted payload is a standard GLB using `EXT_meshopt_compression`.
+// File layout (reverse-engineered):
+//   bytes 0..7      "MESHY.AI" magic
+//   bytes 8..9      little-endian version (observed: 1)
+//   bytes 10..21    12-byte AES nonce
+//   bytes 22..31    reserved
+//   bytes 32..-16   body
+//   last 16 bytes   file-level MAC (we don't verify)
 //
-// We drive the upstream WASM rather than reimplementing the cipher.
-// The viewer must be served from `localhost` for the worker to authorize.
+// Body layout, where W is the GLB header+JSON+BIN-header+WebP region length
+// (W = 2516 + bufferViews[0].byteLength, computed from the decrypted JSON):
+//   body[0..W]      AES-256-CTR ciphertext  → decrypts to GLB[0..W]
+//   body[W..W+16]   AES-GCM tag for the prefix (skipped)
+//   body[W+16..end] plaintext meshopt streams → mapped to GLB[W..end]
+//
+// Cipher:
+//   AES-256-CTR
+//   key = 32-byte ASCII literal 'JSON{"accessors":[{"bufferView":'
+//   ctr = nonce || uint32be(2)  (AES-GCM keystream layout: J0=1 reserved
+//                                for the tag, plaintext blocks start at J0+1)
+//
+// Output is a standard GLB using EXT_meshopt_compression that
+// three.js's GLTFLoader renders directly when MeshoptDecoder is registered.
+// No meshy WASM, no localhost requirement, no allowlist.
 
-// Deterministic auth signature: FNV-1a + MurmurHash3 fmix64 over
-// hostname:timestamp seeded with the salt below.
-const AUTH_SALT = 'Meshy_Crypto_Key';
+const KEY_ASCII = 'JSON{"accessors":[{"bufferView":';
+const GCM_TAG_LEN = 16;
 
-export function meshySignature(hostname, timestamp) {
-  const OFFSET = 14695981039346656037n;
-  const PRIME  = 1099511628211n;
-  const MASK   = 0xFFFFFFFFFFFFFFFFn;
-  const e = hostname + ':' + timestamp;
-  let r = OFFSET;
-  for (let i = 0; i < AUTH_SALT.length; i++) { r ^= BigInt(AUTH_SALT.charCodeAt(i)); r = (r * PRIME) & MASK; }
-  for (let i = 0; i < e.length; i++)         { r ^= BigInt(e.charCodeAt(i));         r = (r * PRIME) & MASK; }
-  r ^= r >> 33n;
-  r = (r * 0xff51afd7ed558ccdn) & MASK;
-  r ^= r >> 33n;
-  r = (r * 0xc4ceb9fe1a85ec53n) & MASK;
-  r ^= r >> 33n;
-  return r.toString(16).padStart(16, '0');
+let cachedKey = null;
+async function importKey() {
+  if (cachedKey) return cachedKey;
+  cachedKey = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(KEY_ASCII),
+    { name: 'AES-CTR' },
+    false,
+    ['decrypt']
+  );
+  return cachedKey;
 }
 
 export function isMeshyFile(buffer) {
-  if (!buffer || buffer.byteLength < 8) return false;
+  if (!buffer || buffer.byteLength < 32) return false;
   const head = new Uint8Array(buffer, 0, 8);
-  return new TextDecoder().decode(head).startsWith('MESHY.AI');
+  return new TextDecoder().decode(head) === 'MESHY.AI';
 }
 
 export function isGlbFile(buffer) {
   if (!buffer || buffer.byteLength < 4) return false;
-  return new Uint32Array(buffer.slice(0, 4))[0] === 0x46546C67; // 'glTF'
+  const head = new Uint8Array(buffer, 0, 4);
+  return head[0] === 0x67 && head[1] === 0x6c && head[2] === 0x54 && head[3] === 0x46;
 }
 
-export class MeshyDecryptor {
-  constructor({ workerUrl = './vendor/loader-worker.min.js', onStatus } = {}) {
-    this.workerUrl = workerUrl;
-    this.onStatus = onStatus ?? (() => {});
-    this.worker = null;
-    this.ready = null;
-    this.nextId = 0;
-    this.pending = new Map();
-  }
+function ctrBlock(nonce) {
+  const counter = new Uint8Array(16);
+  counter.set(nonce, 0);
+  counter[15] = 0x02;
+  return counter;
+}
 
-  boot() {
-    if (this.ready) return this.ready;
-    this.ready = new Promise((resolve, reject) => {
-      this.worker = new Worker(this.workerUrl, { type: 'module' });
-      this.worker.onerror = (e) => reject(new Error(`worker error: ${e.message}`));
-      this.worker.onmessage = (ev) => this._handle(ev.data, resolve, reject);
-    });
-    return this.ready;
-  }
+async function decryptRange(body, nonce, end) {
+  const key = await importKey();
+  return new Uint8Array(await crypto.subtle.decrypt(
+    { name: 'AES-CTR', counter: ctrBlock(nonce), length: 32 },
+    key,
+    body.subarray(0, end)
+  ));
+}
 
-  _handle(msg, resolveReady, rejectReady) {
-    if (!msg || !msg.type) return;
-    if (msg.type === 'loaded') {
-      const hostname = location.hostname;
-      const timestamp = Date.now();
-      const signature = meshySignature(hostname, timestamp);
-      this.onStatus(`worker loaded, authorizing for ${hostname}…`);
-      this.worker.postMessage({ type: 'authorize', hostname, timestamp, signature });
-    } else if (msg.type === 'ready') {
-      this.onStatus('authorized — ready');
-      resolveReady();
-    } else if (msg.type === 'auth_error') {
-      rejectReady(new Error(
-        `${msg.error}\n\n` +
-        `Make sure the URL bar shows "localhost" exactly ` +
-        `(not 127.0.0.1, not a LAN IP).`
-      ));
-    } else if (msg.type === 'error') {
-      rejectReady(new Error(`worker error: ${msg.error}`));
-    } else if (msg.type === 'process') {
-      const p = this.pending.get(msg.id);
-      if (!p) return;
-      this.pending.delete(msg.id);
-      msg.success ? p.resolve(msg.data) : p.reject(new Error(msg.error));
-    }
-  }
+export async function meshyToGlb(buffer) {
+  if (isGlbFile(buffer)) return buffer;
+  if (!isMeshyFile(buffer)) throw new Error('input is neither .meshy nor .glb');
 
-  decrypt(buffer, mode = 'default') {
-    return new Promise((resolve, reject) => {
-      const id = this.nextId++;
-      this.pending.set(id, { resolve, reject });
-      this.worker.postMessage({ id, type: 'process', data: buffer, mode }, [buffer]);
-    });
-  }
+  const bytes = new Uint8Array(buffer);
+  const nonce = bytes.subarray(10, 22);
+  const body = bytes.subarray(32, bytes.length - 16);
 
-  async meshyToGlb(buffer) {
-    await this.boot();
-    if (isGlbFile(buffer)) return buffer;            // already decrypted
-    if (!isMeshyFile(buffer)) throw new Error('input is neither MESHY.AI nor GLB');
-    return await this.decrypt(buffer);
+  // Decrypt the entire body uniformly. The encrypted region is body[0..W]
+  // (where W = 2516 + bufferViews[0].byteLength); past that the body holds a
+  // 16-byte AES-GCM tag and then plaintext meshopt streams. Decrypting the
+  // tail with CTR scrambles those plaintext bytes — we restore them by
+  // overlaying body[W+16..end] onto out[W..]. The GLB's JSON declares
+  // bv-byteLengths that slightly overshoot the actual meshopt encoded data,
+  // so the last 16 bytes of the GLB (still scrambled CTR output) are inside
+  // an unused tail and the decoder ignores them.
+  const key = await importKey();
+  const out = new Uint8Array(await crypto.subtle.decrypt(
+    { name: 'AES-CTR', counter: ctrBlock(nonce), length: 32 },
+    key,
+    body
+  ));
+
+  // Read the freshly-decrypted JSON to find W.
+  const outView = new DataView(out.buffer);
+  if (outView.getUint32(0, true) !== 0x46546c67) {
+    throw new Error('decrypted prefix is not a GLB (wrong magic)');
   }
+  const jsonLen = outView.getUint32(12, true);
+  const json = JSON.parse(new TextDecoder().decode(out.subarray(20, 20 + jsonLen)));
+  const binDataStart = 20 + ((jsonLen + 3) & ~3) + 8;
+  const bv0 = json.bufferViews?.[0];
+  if (!bv0 || typeof bv0.byteLength !== 'number') {
+    throw new Error('decrypted GLB has no bufferViews[0] — unsupported variant');
+  }
+  const W = binDataStart + bv0.byteLength;
+
+  // Overlay plaintext meshopt over the CTR-scrambled tail.
+  out.set(body.subarray(W + GCM_TAG_LEN), W);
+  return out.buffer;
 }

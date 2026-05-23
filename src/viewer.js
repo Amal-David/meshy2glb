@@ -2,6 +2,7 @@ import * as THREE          from 'three';
 import { GLTFLoader }       from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls }    from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment }  from 'three/addons/environments/RoomEnvironment.js';
+import { MeshoptDecoder }   from 'three/addons/libs/meshopt_decoder.module.js';
 
 export class Viewer {
   constructor({ container = document.body, background = 0x111111 } = {}) {
@@ -35,6 +36,9 @@ export class Viewer {
 
     this.currentModel = null;
     this.loader = new GLTFLoader();
+    // The decrypted .meshy payload is a GLB that uses EXT_meshopt_compression.
+    // Wire up MeshoptDecoder so the loader can stream-decode it.
+    this.loader.setMeshoptDecoder(MeshoptDecoder);
     this._lastBlobUrl = null;
 
     this._tick();
