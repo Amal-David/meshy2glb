@@ -31,10 +31,33 @@
   #empty {
     position: fixed; inset: 0; display: flex; flex-direction: column;
     align-items: center; justify-content: center; gap: 8px;
-    color: #888; text-align: center; pointer-events: none;
+    color: #888; text-align: center; cursor: pointer;
+    user-select: none; -webkit-user-select: none;
   }
+  #empty:hover .big { color: #fff; }
   #empty.hide { display: none; }
-  #empty .big { font-size: 22px; color: #ccc; }
+  #empty .big { font-size: 22px; color: #ccc; transition: color .15s; }
+  #empty .hint { font-size: 11px; color: #666; margin-top: 4px; }
+
+  #brand {
+    position: fixed; top: 18px; left: 50%; transform: translateX(-50%);
+    text-align: center; pointer-events: none; z-index: 5;
+  }
+  #brand h1 {
+    margin: 0; font-size: 14px; font-weight: 600; color: #ddd;
+    letter-spacing: .02em;
+  }
+  #brand p {
+    margin: 2px 0 0; font-size: 11px; color: #777;
+  }
+
+  #foot {
+    position: fixed; bottom: 12px; right: 14px; z-index: 5;
+    font-size: 11px; color: #666;
+  }
+  #foot a { color: #888; text-decoration: none; border-bottom: 1px dotted #555; }
+  #foot a:hover { color: #ccc; }
+  #foot .sep { margin: 0 6px; color: #444; }
 </style>
 <script type="importmap">
 {
@@ -47,11 +70,23 @@
 </head>
 <body>
 
-<div id="status" class="ok">drop a .meshy file anywhere</div>
+<div id="brand">
+  <h1>meshy2glb</h1>
+  <p>convert <code>.meshy</code> → <code>.glb</code>, in your browser, offline</p>
+</div>
+
+<div id="status" class="ok">drop or click to load a .meshy file</div>
 <div id="drop">drop a .meshy file to decrypt &amp; view</div>
 <div id="empty">
   <div class="big">drop a <code>.meshy</code> file anywhere</div>
   <div>or a <code>.glb</code> to skip decryption</div>
+  <div class="hint">click anywhere to pick a file</div>
+</div>
+<input id="picker" type="file" accept=".meshy,.glb" hidden>
+
+<div id="foot">
+  nothing leaves your browser<span class="sep">·</span>
+  <a href="https://github.com/Amal-David/meshy2glb" target="_blank" rel="noopener">source</a>
 </div>
 
 <script type="module">
@@ -94,14 +129,7 @@ async function handleBuffer(name, buffer) {
   );
 }
 
-// ── drag-and-drop ─────────────────────────────────────────────────────
-addEventListener('dragover', (e) => { e.preventDefault(); $drop.classList.add('show'); });
-addEventListener('dragleave', (e) => { if (e.target === document.body) $drop.classList.remove('show'); });
-addEventListener('drop', async (e) => {
-  e.preventDefault();
-  $drop.classList.remove('show');
-  const file = e.dataTransfer.files[0];
-  if (!file) return;
+async function loadFile(file) {
   try {
     const buffer = await file.arrayBuffer();
     await handleBuffer(file.name, buffer);
@@ -109,6 +137,25 @@ addEventListener('drop', async (e) => {
     setStatus(`error: ${err.message}`, 'err');
     console.error(err);
   }
+}
+
+// ── drag-and-drop ─────────────────────────────────────────────────────
+addEventListener('dragover', (e) => { e.preventDefault(); $drop.classList.add('show'); });
+addEventListener('dragleave', (e) => { if (e.target === document.body) $drop.classList.remove('show'); });
+addEventListener('drop', (e) => {
+  e.preventDefault();
+  $drop.classList.remove('show');
+  const file = e.dataTransfer.files[0];
+  if (file) loadFile(file);
+});
+
+// ── click-to-pick ─────────────────────────────────────────────────────
+const $picker = document.getElementById('picker');
+$empty.addEventListener('click', () => $picker.click());
+$picker.addEventListener('change', () => {
+  const file = $picker.files?.[0];
+  if (file) loadFile(file);
+  $picker.value = '';
 });
 </script>
 
