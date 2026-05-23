@@ -134,7 +134,13 @@ async function loadFile(file) {
     const buffer = await file.arrayBuffer();
     await handleBuffer(file.name, buffer);
   } catch (err) {
-    setStatus(`error: ${err.message}`, 'err');
+    let msg = err.message;
+    if (/Malformed buffer data/i.test(msg) || /offset is out of bounds/i.test(msg)) {
+      msg = `couldn't decode ${file.name} — this looks like a no-texture variant ` +
+            `of .meshy that the clean-room decoder doesn't yet handle. ` +
+            `Files with WebP textures work; texture-less ones are tracked as a known issue.`;
+    }
+    setStatus(`error: ${msg}`, 'err');
     console.error(err);
   }
 }
