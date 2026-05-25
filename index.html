@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>meshy2glb — local .meshy viewer</title>
+<title>meshy2glb — .meshy viewer &amp; converter</title>
 <style>
   html, body { margin: 0; padding: 0; overflow: hidden; background: #111; color: #eee;
                font: 13px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; }
@@ -10,8 +10,8 @@
 
   #status {
     position: fixed; top: 12px; left: 12px; z-index: 10;
-    background: rgba(0,0,0,.6); padding: 10px 14px; border-radius: 8px;
-    max-width: 520px;
+    background: rgba(0,0,0,.65); padding: 10px 14px; border-radius: 8px;
+    max-width: 520px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
   }
   #status.ok   { color: #6fdc8c; }
   #status.err  { color: #ff8a8a; white-space: pre-wrap; }
@@ -51,6 +51,15 @@
     margin: 2px 0 0; font-size: 11px; color: #777;
   }
 
+  #open-btn {
+    position: fixed; top: 12px; right: 14px; z-index: 10;
+    background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.15);
+    color: #ccc; padding: 6px 14px; border-radius: 6px; cursor: pointer;
+    font: inherit; font-size: 12px; backdrop-filter: blur(8px);
+    transition: background .15s, color .15s;
+  }
+  #open-btn:hover { background: rgba(255,255,255,.18); color: #fff; }
+
   #foot {
     position: fixed; bottom: 12px; right: 14px; z-index: 5;
     font-size: 11px; color: #666;
@@ -75,6 +84,8 @@
   <p>convert <code>.meshy</code> → <code>.glb</code>, in your browser, offline</p>
 </div>
 
+<button id="open-btn">open file</button>
+
 <div id="status" class="ok">drop or click to load a .meshy file</div>
 <div id="drop">drop a .meshy file to decrypt &amp; view</div>
 <div id="empty">
@@ -93,9 +104,11 @@
 import { meshyToGlb, isMeshyFile, isGlbFile } from './src/decrypt.js';
 import { Viewer } from './src/viewer.js';
 
-const $status = document.getElementById('status');
-const $drop   = document.getElementById('drop');
-const $empty  = document.getElementById('empty');
+const $status  = document.getElementById('status');
+const $drop    = document.getElementById('drop');
+const $empty   = document.getElementById('empty');
+const $picker  = document.getElementById('picker');
+const $openBtn = document.getElementById('open-btn');
 
 const setStatus = (html, cls = 'work') => {
   $status.className = cls;
@@ -108,6 +121,7 @@ const viewer = new Viewer();
 async function handleBuffer(name, buffer) {
   $empty.classList.add('hide');
   const sizeMb = (buffer.byteLength / 1024 / 1024).toFixed(2);
+  const baseName = name.replace(/\.(meshy|glb)$/i, '');
 
   let glb;
   if (isGlbFile(buffer)) {
@@ -123,8 +137,8 @@ async function handleBuffer(name, buffer) {
   const { blobUrl, triangles } = await viewer.loadGLB(glb);
   const glbMb = (glb.byteLength / 1024 / 1024).toFixed(2);
   setStatus(
-    `&#10003; ${name} &mdash; ${glbMb} MB GLB, ~${triangles.toLocaleString()} triangles ` +
-    `&middot; <a href="${blobUrl}" download="${name.replace(/\.(meshy|glb)$/i,'')}.glb">download .glb</a>`,
+    `<b>${baseName}</b> &mdash; ${glbMb} MB, ~${triangles.toLocaleString()} triangles<br>` +
+    `<a href="${blobUrl}" download="${baseName}.glb">download .glb</a>`,
     'ok'
   );
 }
@@ -136,16 +150,16 @@ async function loadFile(file) {
   } catch (err) {
     let msg = err.message;
     if (/Malformed buffer data/i.test(msg) || /offset is out of bounds/i.test(msg)) {
-      msg = `couldn't decode ${file.name} — this looks like a no-texture variant ` +
-            `of .meshy that the clean-room decoder doesn't yet handle. ` +
-            `Files with WebP textures work; texture-less ones are tracked as a known issue.`;
+      msg = `couldn't decode ${file.name} — this may be an unsupported .meshy variant.`;
     }
     setStatus(`error: ${msg}`, 'err');
     console.error(err);
   }
 }
 
-// ── drag-and-drop ─────────────────────────────────────────────────────
+function pickFile() { $picker.click(); }
+
+// ── drag-and-drop (always active, even after a model is loaded) ──────
 addEventListener('dragover', (e) => { e.preventDefault(); $drop.classList.add('show'); });
 addEventListener('dragleave', (e) => { if (e.target === document.body) $drop.classList.remove('show'); });
 addEventListener('drop', (e) => {
@@ -155,9 +169,9 @@ addEventListener('drop', (e) => {
   if (file) loadFile(file);
 });
 
-// ── click-to-pick ─────────────────────────────────────────────────────
-const $picker = document.getElementById('picker');
-$empty.addEventListener('click', () => $picker.click());
+// ── click-to-pick (empty state + persistent "open file" button) ──────
+$empty.addEventListener('click', pickFile);
+$openBtn.addEventListener('click', pickFile);
 $picker.addEventListener('change', () => {
   const file = $picker.files?.[0];
   if (file) loadFile(file);

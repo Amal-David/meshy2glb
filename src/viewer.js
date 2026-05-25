@@ -12,7 +12,7 @@ export class Viewer {
     this.renderer.setSize(innerWidth, innerHeight);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.0;
+    this.renderer.toneMappingExposure = 2.0;
     this.container.appendChild(this.renderer.domElement);
 
     this.scene = new THREE.Scene();
@@ -27,10 +27,13 @@ export class Viewer {
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
 
-    this.scene.add(new THREE.HemisphereLight(0xffffff, 0x202030, 0.6));
-    const dir = new THREE.DirectionalLight(0xffffff, 1.2);
+    this.scene.add(new THREE.HemisphereLight(0xffffff, 0x404060, 1.5));
+    const dir = new THREE.DirectionalLight(0xffffff, 2.5);
     dir.position.set(3, 5, 2);
     this.scene.add(dir);
+    const fill = new THREE.DirectionalLight(0xffffff, 1.0);
+    fill.position.set(-3, 2, -2);
+    this.scene.add(fill);
 
     addEventListener('resize', () => this._onResize());
 
