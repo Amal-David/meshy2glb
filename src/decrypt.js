@@ -5,8 +5,7 @@
 //   bytes 8..9      little-endian version (observed: 1)
 //   bytes 10..21    12-byte AES nonce
 //   bytes 22..31    reserved
-//   bytes 32..-16   body
-//   last 16 bytes   file-level MAC (we don't verify)
+//   bytes 32..end   body (everything after the header)
 //
 // Cipher:
 //   AES-256-CTR
@@ -15,8 +14,8 @@
 //
 // Body layout:
 //   body[0..8192]     AES-CTR ciphertext → decrypts to GLB[0..8192]
-//   body[8192..8208]  16-byte AES-GCM tag (skipped)
-//   body[8208..end]   plaintext (textures + meshopt streams) → GLB[8192..]
+//   body[8192..8208]  16-byte AES-GCM auth tag (the only tag; skipped)
+//   body[8208..end]   plaintext (textures + meshopt streams) → GLB[8192..end]
 //
 // The encoder always encrypts exactly 8 KB (512 AES blocks). Everything
 // after the 16-byte tag is stored verbatim — WebP textures, meshopt-
@@ -66,7 +65,7 @@ export async function meshyToGlb(buffer) {
 
   const bytes = new Uint8Array(buffer);
   const nonce = bytes.subarray(10, 22);
-  const body = bytes.subarray(32, bytes.length - 16);
+  const body = bytes.subarray(32);
 
   if (body.length < ENCRYPTED_LEN + TAG_LEN) {
     throw new Error('.meshy body too small');
@@ -77,16 +76,22 @@ export async function meshyToGlb(buffer) {
   counter[15] = 0x02;
 
   const key = await importKey();
-  const out = new Uint8Array(await crypto.subtle.decrypt(
+  const prefix = new Uint8Array(await crypto.subtle.decrypt(
     { name: 'AES-CTR', counter, length: 32 },
     key,
-    body
+    body.subarray(0, ENCRYPTED_LEN)
   ));
 
-  if (new DataView(out.buffer).getUint32(0, true) !== 0x46546c67) {
+  if (new DataView(prefix.buffer).getUint32(0, true) !== 0x46546c67) {
     throw new Error('decrypted prefix is not a GLB (wrong magic)');
   }
 
-  out.set(body.subarray(ENCRYPTED_LEN + TAG_LEN), ENCRYPTED_LEN);
+  const plaintext = body.subarray(ENCRYPTED_LEN + TAG_LEN);
+  const glbLen = ENCRYPTED_LEN + plaintext.length;
+  const out = new Uint8Array(glbLen);
+  out.set(prefix, 0);
+  out.set(plaintext, ENCRYPTED_LEN);
+
+  new DataView(out.buffer).setUint32(8, glbLen, true);
   return out.buffer;
 }

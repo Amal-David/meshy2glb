@@ -126,7 +126,17 @@ if (fixtures.length === 0) {
           () => MeshoptDecoder.decodeGltfBuffer(target, ext.count, ext.byteStride, src, ext.mode, ext.filter || ''),
           `bv[${i}] mode=${ext.mode} count=${ext.count} stride=${ext.byteStride}: meshopt decode failed`,
         );
+        if (ext.mode === 'TRIANGLES' && ext.byteStride === 4) {
+          const indices = new Uint32Array(target.buffer, target.byteOffset, ext.count);
+          const badCount = Array.from(indices).filter(v => v === 0xFFFFFFFF).length;
+          assert.equal(badCount, 0, `bv[${i}] has ${badCount} corrupted 0xFFFFFFFF indices`);
+        }
       }
+
+      // GLB declared total length must match actual buffer size
+      assert.equal(dv.getUint32(8, true), glb.byteLength, 'GLB declared length matches buffer');
+      const declaredBinLen = dv.getUint32(binHeaderAt, true);
+      assert.equal(declaredBinLen, glb.byteLength - binDataStart, 'BIN chunk length matches remaining bytes');
     });
   }
 }
