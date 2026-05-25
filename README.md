@@ -1,13 +1,45 @@
 # meshy2glb
 
-Local browser viewer / converter for `.meshy` files. Drop one in,
-preview it, download `.glb`.
+Browser-based converter and viewer for [meshy.ai](https://meshy.ai)'s
+`.meshy` 3D model files. Drop one in, preview it with adjustable
+lighting, download a standard `.glb`.
 
-**Live demo:** https://amal-david.github.io/meshy2glb/
+**Live:** https://amal-david.github.io/meshy2glb/
 
-Pure JS — no WASM bundled, no server roundtrip. The whole decoder is
-~80 lines using the browser's built-in WebCrypto API. Ships as static
-HTML to GitHub Pages or any static host.
+Everything runs client-side — decryption, meshopt decompression, and
+rendering all happen in your browser. No file ever leaves your machine.
+
+## How it works
+
+`.meshy` files are AES-256-CTR encrypted glTF/GLB containers with
+meshopt-compressed vertex data. The decoder was built clean-room
+through reverse engineering (no meshy code or WASM in the bundle):
+
+1. **Decrypt** — the first 8 KB of the body is AES-256-CTR encrypted
+   with a fixed 32-byte ASCII key and a per-file nonce from the header.
+   A 16-byte GCM auth tag follows. Everything after is plaintext.
+2. **Decompress** — the decrypted GLB uses `EXT_meshopt_compression`.
+   We run [meshoptimizer](https://github.com/zeux/meshoptimizer)'s JS
+   decoder on every compressed bufferView to produce a standard GLB
+   with raw vertex/index data.
+3. **Render** — three.js loads the GLB. The viewer provides orbit
+   controls, adjustable lighting, wireframe mode, background presets,
+   and auto-rotate.
+
+The full pipeline (decrypt → decompress → render) takes ~80 ms for a
+5 MB model.
+
+## Features
+
+- **Drag-and-drop or click to upload** — accepts `.meshy` and `.glb`
+- **Lighting controls** — exposure, environment intensity, direct
+  light, ambient light (all real-time sliders)
+- **Display options** — wireframe toggle, auto-rotate, background
+  presets (dark / grey / white / black), camera reset
+- **One-click .glb download** — the output is a standard GLB
+  compatible with Blender, Unity, Unreal, any glTF viewer
+- Works on any static host — GitHub Pages, Cloudflare Pages, S3,
+  localhost
 
 ## Run locally
 
@@ -17,48 +49,68 @@ cd meshy2glb
 ./start.sh
 ```
 
-Open the URL it prints, drag a `.meshy` onto the page or click to pick
-a file from your machine.
-
 ## Tests
 
 ```bash
 node --test tests/decrypt.test.mjs
 ```
 
-Tests cover format detection, magic-byte checks, and end-to-end decode
-(including a real `MeshoptDecoder` pass) for any `.meshy` fixtures
-found in:
+9 tests covering format detection, AES-CTR decryption, meshopt decode
+integrity (zero corrupted indices), and GLB structural validation.
+Fixture-driven tests run on any `.meshy` files in `tests/fixtures/` or
+`$MESHY_FIXTURES`.
 
-- `$MESHY_FIXTURES` (env var pointing at a directory)
-- `./tests/fixtures/` (gitignored local dir)
+## File format (reverse-engineered)
 
-If no fixtures exist locally, the fixture-driven tests skip with a
-clear message — the core unit tests still run.
+```
+Offset          Contents
+────────────    ────────────────────────────────────────────────
+0..7            magic "MESHY.AI"
+8..9            version (uint16 LE, observed: 1)
+10..21          12-byte AES nonce
+22..31          reserved
+32..8224        AES-256-CTR ciphertext (always 8192 bytes)
+8224..8240      16-byte AES-GCM authentication tag
+8240..EOF       plaintext (WebP textures + meshopt streams)
+```
 
-## Deploy on GitHub Pages
+Cipher: AES-256-CTR, key = `JSON{"accessors":[{"bufferView":` (literal
+ASCII), counter = `nonce || uint32be(2)`.
 
-It's just static HTML/JS — push to a repo, turn on Pages from the
-repository settings (Source: `main` branch, root). The `.nojekyll`
-file in this repo makes Pages serve everything verbatim. No build
-step.
+The encrypted 8 KB contains the GLB header, glTF JSON, BIN chunk
+header, and the start of the first buffer view. Everything after the
+16-byte tag is stored in the clear — textures (WebP) and meshopt-
+compressed vertex/index streams.
 
-## Status
+Full reverse-engineering notes (including dead ends) are in
+[NOTES.md](./NOTES.md).
 
-Both known `.meshy` variants decode and render end-to-end:
+## Architecture
 
-- **Files with WebP textures** — the common case for textured meshy.ai
-  exports.
-- **Files without textures (all-meshopt)** — also fully supported.
-  The encoder always encrypts at least 8 KB; the decoder detects this
-  and applies the correct split boundary.
+```
+src/
+  decrypt.js      AES-256-CTR decryption via WebCrypto (~50 LOC)
+  decompress.js   meshopt decompression → standard GLB (~100 LOC)
+  viewer.js       three.js renderer with controls
+index.html        UI: upload, controls panel, top bar
+tests/
+  decrypt.test.mjs    node:test suite (9 tests)
+  meshopt_decoder.module.js   vendored decoder for offline tests
+```
 
-Implementation notes are in [NOTES.md](./NOTES.md).
+## Credits
+
+- [zeux/meshoptimizer](https://github.com/zeux/meshoptimizer) — the
+  mesh compression library (MIT)
+- [three.js](https://threejs.org/) — 3D rendering (MIT)
+- [youssef02/meshy2glb](https://github.com/youssef02/meshy2glb) —
+  original Tampermonkey approach
+- [Pouare514/meshy-downloader](https://github.com/Pouare514/meshy-downloader)
+  — Chrome extension with similar in-page intercept
 
 ## Disclaimer
 
-Not affiliated with [meshy.ai](https://meshy.ai). Runs locally;
-nothing is uploaded.
+Not affiliated with [meshy.ai](https://meshy.ai).
 
 ## License
 
