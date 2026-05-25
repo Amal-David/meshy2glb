@@ -73,28 +73,12 @@ test('meshyToGlb passes through a GLB unchanged', async () => {
   assert.equal(out, glb);
 });
 
-// A `.meshy` file uses one of two layouts (see src/decrypt.js). The
-// "split" layout (used when bv[0] is non-meshopt content like WebP) is
-// fully supported. The all-meshopt layout, used for texture-less assets,
-// is not yet decoded correctly — bv[0]'s meshopt data ends up corrupted
-// after our AES-CTR pass, and we haven't worked out the alternate cipher
-// path the meshy WASM takes there. Those fixtures are marked todo so they
-// run and report but don't break the suite.
-function isAllMeshoptFixture(path) {
-  // Detect by JSON content: no EXT_texture_webp means bv[0] is meshopt.
-  // We don't actually decrypt here — just probe the size as a proxy.
-  // Real check happens inside the test.
-  return statSync(path).size < 2 * 1024 * 1024;  // crude heuristic
-}
-
 if (fixtures.length === 0) {
   test('fixture-driven tests (skipped: no .meshy fixtures found)', { skip: true }, () => {});
 } else {
   for (const path of fixtures) {
     const name = path.split('/').pop();
-    const isUnsupported = isAllMeshoptFixture(path);
-    const opts = isUnsupported ? { todo: 'no-WebP variant not yet decoded correctly' } : {};
-    test(`decode: ${name}`, opts, async () => {
+    test(`decode: ${name}`, async () => {
       const meshyBuf = readFileSync(path).buffer;
       const glb = await meshyToGlb(meshyBuf);
       assert.ok(glb instanceof ArrayBuffer, 'returns ArrayBuffer');

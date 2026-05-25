@@ -45,13 +45,13 @@ step.
 
 ## Status
 
-- **Files with WebP textures** — decoded and rendered end-to-end. This
-  is the common case for textured meshy.ai exports.
-- **Files without textures (all-meshopt)** — partial. The header and
-  JSON decrypt cleanly, but the first meshopt-compressed bufferView
-  comes out corrupted under our AES-CTR pass. The UI surfaces a
-  clear error rather than crashing. Tracked as a known limitation; see
-  `tests/decrypt.test.mjs` (one `todo` entry).
+Both known `.meshy` variants decode and render end-to-end:
+
+- **Files with WebP textures** — the common case for textured meshy.ai
+  exports.
+- **Files without textures (all-meshopt)** — also fully supported.
+  The encoder always encrypts at least 8 KB; the decoder detects this
+  and applies the correct split boundary.
 
 Implementation notes are in [NOTES.md](./NOTES.md).
 
