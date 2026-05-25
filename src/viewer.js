@@ -4,9 +4,9 @@ import { OrbitControls }    from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment }  from 'three/addons/environments/RoomEnvironment.js';
 
 export class Viewer {
-  constructor({ container = document.body, background = 0x111111 } = {}) {
+  constructor({ container = document.body, background = 0x1a1a2e } = {}) {
     this.container = container;
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     this.renderer.setPixelRatio(devicePixelRatio);
     this.renderer.setSize(innerWidth, innerHeight);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -18,18 +18,25 @@ export class Viewer {
     this.scene.background = new THREE.Color(background);
 
     const pmrem = new THREE.PMREMGenerator(this.renderer);
-    this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    this._envTexture = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    this.scene.environment = this._envTexture;
+    this._envIntensity = 1.0;
 
     this.camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.01, 1000);
     this.camera.position.set(2, 1.5, 3);
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
+    this.controls.autoRotate = false;
+    this.controls.autoRotateSpeed = 2.0;
 
-    this.scene.add(new THREE.HemisphereLight(0xffffff, 0x202030, 0.6));
-    const dir = new THREE.DirectionalLight(0xffffff, 1.2);
-    dir.position.set(3, 5, 2);
-    this.scene.add(dir);
+    this._hemiLight = new THREE.HemisphereLight(0xffffff, 0x202030, 0.6);
+    this.scene.add(this._hemiLight);
+    this._dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+    this._dirLight.position.set(3, 5, 2);
+    this.scene.add(this._dirLight);
+
+    this._wireframe = false;
 
     addEventListener('resize', () => this._onResize());
 
@@ -67,6 +74,48 @@ export class Viewer {
     this.controls.update();
   }
 
+  setExposure(v) {
+    this.renderer.toneMappingExposure = v;
+  }
+
+  setEnvIntensity(v) {
+    this._envIntensity = v;
+    if (this.currentModel) {
+      this.currentModel.traverse(o => {
+        if (o.isMesh && o.material) o.material.envMapIntensity = v;
+      });
+    }
+  }
+
+  setDirectLight(v) {
+    this._dirLight.intensity = v;
+  }
+
+  setAmbientLight(v) {
+    this._hemiLight.intensity = v;
+  }
+
+  setBackground(hex) {
+    this.scene.background = new THREE.Color(hex);
+  }
+
+  setAutoRotate(on) {
+    this.controls.autoRotate = on;
+  }
+
+  setWireframe(on) {
+    this._wireframe = on;
+    if (this.currentModel) {
+      this.currentModel.traverse(o => {
+        if (o.isMesh && o.material) o.material.wireframe = on;
+      });
+    }
+  }
+
+  resetCamera() {
+    if (this.currentModel) this._frame(this.currentModel);
+  }
+
   countTriangles(scene) {
     let n = 0;
     scene.traverse((o) => {
@@ -83,6 +132,12 @@ export class Viewer {
     const gltf = await this.loader.loadAsync(url);
     if (this.currentModel) this.scene.remove(this.currentModel);
     this.currentModel = gltf.scene;
+    this.currentModel.traverse(o => {
+      if (o.isMesh && o.material) {
+        o.material.envMapIntensity = this._envIntensity;
+        o.material.wireframe = this._wireframe;
+      }
+    });
     this.scene.add(this.currentModel);
     this._frame(this.currentModel);
 

@@ -2,71 +2,129 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>meshy2glb — .meshy viewer &amp; converter</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>meshy2glb — .meshy to .glb converter</title>
 <style>
-  html, body { margin: 0; padding: 0; overflow: hidden; background: #111; color: #eee;
-               font: 13px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; }
-  canvas { display: block; }
-
-  #status {
-    position: fixed; top: 12px; left: 12px; z-index: 10;
-    background: rgba(0,0,0,.65); padding: 10px 14px; border-radius: 8px;
-    max-width: 520px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  :root {
+    --bg: #0f0f1a;
+    --surface: rgba(255,255,255,.06);
+    --surface-hover: rgba(255,255,255,.1);
+    --border: rgba(255,255,255,.1);
+    --text: #e0e0e8;
+    --text-dim: #888;
+    --text-faint: #555;
+    --accent: #6c8aff;
+    --accent-hover: #8aa4ff;
+    --success: #5cd48b;
+    --warn: #ffd166;
+    --err: #ff6b6b;
+    --radius: 10px;
+    --radius-sm: 6px;
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
   }
-  #status.ok   { color: #6fdc8c; }
-  #status.err  { color: #ff8a8a; white-space: pre-wrap; }
-  #status.work { color: #ffd166; }
-  #status a    { color: #aef; }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--text);
+               font: 13px/1.5 var(--font); -webkit-font-smoothing: antialiased; }
+  canvas { display: block; }
+  button { font: inherit; cursor: pointer; border: none; outline: none; }
+  input[type=range] { -webkit-appearance: none; appearance: none; background: transparent; cursor: pointer; }
+  input[type=range]::-webkit-slider-track { height: 3px; background: var(--border); border-radius: 2px; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px;
+    background: var(--accent); border-radius: 50%; margin-top: -5px; }
 
+  /* ── top bar ──────────────────────────────────────────────────────── */
+  #topbar {
+    position: fixed; top: 0; left: 0; right: 0; height: 48px; z-index: 20;
+    display: flex; align-items: center; padding: 0 16px; gap: 12px;
+    background: rgba(15,15,26,.85); backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+  }
+  #topbar .logo { font-size: 15px; font-weight: 700; color: #fff; letter-spacing: -.01em; }
+  #topbar .logo span { color: var(--accent); }
+  #topbar .sep { width: 1px; height: 20px; background: var(--border); }
+  #topbar .info { font-size: 12px; color: var(--text-dim); flex: 1; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #topbar .info b { color: var(--text); font-weight: 500; }
+  #topbar .info .tri { color: var(--text-faint); margin-left: 4px; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    color: var(--text); font-size: 12px; transition: all .15s; }
+  .btn:hover { background: var(--surface-hover); color: #fff; }
+  .btn-accent { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 500; }
+  .btn-accent:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+  .btn svg { width: 14px; height: 14px; fill: currentColor; }
+
+  /* ── status toast ─────────────────────────────────────────────────── */
+  #toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 30;
+    background: rgba(15,15,26,.9); backdrop-filter: blur(12px);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 10px 18px; font-size: 13px; max-width: 500px; text-align: center;
+    transition: opacity .3s, transform .3s; pointer-events: none;
+  }
+  #toast.hidden { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  #toast.ok { color: var(--success); }
+  #toast.err { color: var(--err); }
+  #toast.work { color: var(--warn); }
+
+  /* ── drop overlay ─────────────────────────────────────────────────── */
   #drop {
-    position: fixed; inset: 0;
-    background: rgba(50,90,200,.25);
-    border: 4px dashed #6aa;
+    position: fixed; inset: 0; z-index: 50;
+    background: rgba(108,138,255,.12); border: 3px dashed var(--accent);
     display: none; align-items: center; justify-content: center;
-    font-size: 22px; color: #fff; z-index: 20;
-    pointer-events: none;
+    font-size: 18px; color: #fff; pointer-events: none; backdrop-filter: blur(4px);
   }
   #drop.show { display: flex; }
 
+  /* ── empty / upload state ─────────────────────────────────────────── */
   #empty {
-    position: fixed; inset: 0; display: flex; flex-direction: column;
-    align-items: center; justify-content: center; gap: 8px;
-    color: #888; text-align: center; cursor: pointer;
-    user-select: none; -webkit-user-select: none;
+    position: fixed; inset: 48px 0 0 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 16px; text-align: center;
   }
-  #empty:hover .big { color: #fff; }
   #empty.hide { display: none; }
-  #empty .big { font-size: 22px; color: #ccc; transition: color .15s; }
-  #empty .hint { font-size: 11px; color: #666; margin-top: 4px; }
+  #empty .upload-zone {
+    width: 360px; max-width: 90vw; padding: 48px 32px; border: 2px dashed var(--border);
+    border-radius: 16px; cursor: pointer; transition: all .2s;
+    background: var(--surface);
+  }
+  #empty .upload-zone:hover { border-color: var(--accent); background: rgba(108,138,255,.06); }
+  #empty .upload-zone svg { width: 40px; height: 40px; fill: var(--text-dim); margin-bottom: 12px; }
+  #empty .upload-zone:hover svg { fill: var(--accent); }
+  #empty .upload-zone h2 { font-size: 16px; font-weight: 500; color: var(--text); margin-bottom: 4px; }
+  #empty .upload-zone p { font-size: 12px; color: var(--text-dim); }
+  #empty .formats { font-size: 11px; color: var(--text-faint); }
 
-  #brand {
-    position: fixed; top: 18px; left: 50%; transform: translateX(-50%);
-    text-align: center; pointer-events: none; z-index: 5;
+  /* ── controls panel ───────────────────────────────────────────────── */
+  #panel {
+    position: fixed; top: 56px; right: 8px; z-index: 15; width: 220px;
+    background: rgba(15,15,26,.88); backdrop-filter: blur(12px);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 14px; display: none; flex-direction: column; gap: 12px;
+    font-size: 12px;
   }
-  #brand h1 {
-    margin: 0; font-size: 14px; font-weight: 600; color: #ddd;
-    letter-spacing: .02em;
+  #panel.show { display: flex; }
+  #panel h3 { font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .06em; color: var(--text-dim); margin-bottom: 2px; }
+  .ctrl { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .ctrl label { color: var(--text-dim); min-width: 60px; }
+  .ctrl input[type=range] { flex: 1; }
+  .ctrl .val { width: 28px; text-align: right; color: var(--text-faint); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .ctrl-row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip {
+    padding: 4px 10px; border-radius: 4px; font-size: 11px; cursor: pointer;
+    background: var(--surface); border: 1px solid var(--border); color: var(--text-dim);
+    transition: all .15s;
   }
-  #brand p {
-    margin: 2px 0 0; font-size: 11px; color: #777;
-  }
+  .chip:hover { background: var(--surface-hover); color: var(--text); }
+  .chip.active { background: rgba(108,138,255,.15); border-color: var(--accent); color: var(--accent); }
 
-  #open-btn {
-    position: fixed; top: 12px; right: 14px; z-index: 10;
-    background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.15);
-    color: #ccc; padding: 6px 14px; border-radius: 6px; cursor: pointer;
-    font: inherit; font-size: 12px; backdrop-filter: blur(8px);
-    transition: background .15s, color .15s;
-  }
-  #open-btn:hover { background: rgba(255,255,255,.18); color: #fff; }
-
+  /* ── footer ───────────────────────────────────────────────────────── */
   #foot {
-    position: fixed; bottom: 12px; right: 14px; z-index: 5;
-    font-size: 11px; color: #666;
+    position: fixed; bottom: 8px; right: 12px; z-index: 5;
+    font-size: 10px; color: var(--text-faint);
   }
-  #foot a { color: #888; text-decoration: none; border-bottom: 1px dotted #555; }
-  #foot a:hover { color: #ccc; }
-  #foot .sep { margin: 0 6px; color: #444; }
+  #foot a { color: var(--text-dim); text-decoration: none; }
+  #foot a:hover { color: var(--text); }
 </style>
 <script type="importmap">
 {
@@ -79,25 +137,87 @@
 </head>
 <body>
 
-<div id="brand">
-  <h1>meshy2glb</h1>
-  <p>convert <code>.meshy</code> → <code>.glb</code>, in your browser, offline</p>
+<!-- top bar -->
+<div id="topbar">
+  <div class="logo">meshy<span>2glb</span></div>
+  <div class="sep"></div>
+  <div class="info" id="model-info">No model loaded</div>
+  <button class="btn" id="open-btn">
+    <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+    Open file
+  </button>
+  <button class="btn" id="settings-btn">
+    <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.69-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.25-1.13.56-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.69 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.25 1.13-.57 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1112 8.4a3.6 3.6 0 010 7.2z"/></svg>
+  </button>
+  <button class="btn btn-accent" id="download-btn" style="display:none">
+    <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+    Download .glb
+  </button>
 </div>
 
-<button id="open-btn">open file</button>
+<!-- controls panel -->
+<div id="panel">
+  <h3>Lighting</h3>
+  <div class="ctrl">
+    <label>Exposure</label>
+    <input type="range" id="ctrl-exposure" min="0.1" max="4" step="0.1" value="1.0">
+    <span class="val" id="val-exposure">1.0</span>
+  </div>
+  <div class="ctrl">
+    <label>Env</label>
+    <input type="range" id="ctrl-env" min="0" max="3" step="0.1" value="1.0">
+    <span class="val" id="val-env">1.0</span>
+  </div>
+  <div class="ctrl">
+    <label>Direct</label>
+    <input type="range" id="ctrl-direct" min="0" max="5" step="0.1" value="1.2">
+    <span class="val" id="val-direct">1.2</span>
+  </div>
+  <div class="ctrl">
+    <label>Ambient</label>
+    <input type="range" id="ctrl-ambient" min="0" max="3" step="0.1" value="0.6">
+    <span class="val" id="val-ambient">0.6</span>
+  </div>
 
-<div id="status" class="ok">drop or click to load a .meshy file</div>
-<div id="drop">drop a .meshy file to decrypt &amp; view</div>
+  <h3>Display</h3>
+  <div class="ctrl-row">
+    <div class="chip" id="chip-wireframe">Wireframe</div>
+    <div class="chip" id="chip-rotate">Auto-rotate</div>
+  </div>
+
+  <h3>Background</h3>
+  <div class="ctrl-row">
+    <div class="chip active" data-bg="#1a1a2e">Dark</div>
+    <div class="chip" data-bg="#2d2d3d">Grey</div>
+    <div class="chip" data-bg="#ffffff">White</div>
+    <div class="chip" data-bg="#000000">Black</div>
+  </div>
+
+  <button class="btn" id="reset-cam" style="width:100%;justify-content:center;margin-top:4px">Reset camera</button>
+</div>
+
+<!-- upload state -->
 <div id="empty">
-  <div class="big">drop a <code>.meshy</code> file anywhere</div>
-  <div>or a <code>.glb</code> to skip decryption</div>
-  <div class="hint">click anywhere to pick a file</div>
+  <div class="upload-zone" id="upload-zone">
+    <svg viewBox="0 0 24 24"><path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z"/></svg>
+    <h2>Drop a .meshy file here</h2>
+    <p>or click to browse your files</p>
+  </div>
+  <div class="formats">Accepts <b>.meshy</b> and <b>.glb</b> files &middot; processed locally, nothing uploaded</div>
 </div>
+
+<!-- drop overlay -->
+<div id="drop">Drop to convert</div>
+
+<!-- toast -->
+<div id="toast" class="hidden"></div>
+
+<!-- file input -->
 <input id="picker" type="file" accept=".meshy,.glb" hidden>
 
+<!-- footer -->
 <div id="foot">
-  nothing leaves your browser<span class="sep">·</span>
-  <a href="https://github.com/Amal-David/meshy2glb" target="_blank" rel="noopener">source</a>
+  <a href="https://github.com/Amal-David/meshy2glb" target="_blank" rel="noopener">github</a>
 </div>
 
 <script type="module">
@@ -106,45 +226,54 @@ import { decompressGlb } from './src/decompress.js';
 import { Viewer } from './src/viewer.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 
-const $status  = document.getElementById('status');
-const $drop    = document.getElementById('drop');
-const $empty   = document.getElementById('empty');
-const $picker  = document.getElementById('picker');
-const $openBtn = document.getElementById('open-btn');
+const $ = id => document.getElementById(id);
+const $toast    = $('toast');
+const $drop     = $('drop');
+const $empty    = $('empty');
+const $picker   = $('picker');
+const $info     = $('model-info');
+const $panel    = $('panel');
+const $dlBtn    = $('download-btn');
 
-const setStatus = (html, cls = 'work') => {
-  $status.className = cls;
-  $status.innerHTML = html;
-  console.log('[meshy2glb]', html.replace(/<[^>]+>/g, ''));
-};
+let toastTimer;
+function toast(msg, cls = 'work', duration = 0) {
+  $toast.className = cls;
+  $toast.textContent = msg;
+  clearTimeout(toastTimer);
+  if (duration > 0) toastTimer = setTimeout(() => $toast.classList.add('hidden'), duration);
+}
 
 const viewer = new Viewer();
+let lastBlobUrl = null;
+let lastBaseName = '';
 
 async function handleBuffer(name, buffer) {
   $empty.classList.add('hide');
   const sizeMb = (buffer.byteLength / 1024 / 1024).toFixed(2);
-  const baseName = name.replace(/\.(meshy|glb)$/i, '');
+  lastBaseName = name.replace(/\.(meshy|glb)$/i, '');
 
   let glb;
   if (isGlbFile(buffer)) {
-    setStatus(`${name} is already a .glb — rendering directly (${sizeMb} MB)`);
+    toast(`Rendering ${name}…`);
     glb = buffer;
   } else if (isMeshyFile(buffer)) {
-    setStatus(`decrypting ${name} (${sizeMb} MB)…`);
+    toast(`Decrypting ${name} (${sizeMb} MB)…`);
     const intermediate = await meshyToGlb(buffer);
-    setStatus(`decompressing meshopt buffers…`);
+    toast('Decompressing mesh data…');
     glb = await decompressGlb(intermediate, MeshoptDecoder);
   } else {
-    throw new Error('not a .meshy or .glb file');
+    throw new Error('Not a .meshy or .glb file');
   }
 
   const { blobUrl, triangles } = await viewer.loadGLB(glb);
   const glbMb = (glb.byteLength / 1024 / 1024).toFixed(2);
-  setStatus(
-    `<b>${baseName}</b> &mdash; ${glbMb} MB, ~${triangles.toLocaleString()} triangles<br>` +
-    `<a href="${blobUrl}" download="${baseName}.glb">download .glb</a>`,
-    'ok'
-  );
+  if (lastBlobUrl) URL.revokeObjectURL(lastBlobUrl);
+  lastBlobUrl = blobUrl;
+
+  $info.innerHTML = `<b>${lastBaseName}</b> &mdash; ${glbMb} MB &middot; ${triangles.toLocaleString()} triangles`;
+  $dlBtn.style.display = '';
+  $panel.classList.add('show');
+  toast('Ready', 'ok', 2000);
 }
 
 async function loadFile(file) {
@@ -152,35 +281,72 @@ async function loadFile(file) {
     const buffer = await file.arrayBuffer();
     await handleBuffer(file.name, buffer);
   } catch (err) {
-    let msg = err.message;
-    if (/Malformed buffer data/i.test(msg) || /offset is out of bounds/i.test(msg)) {
-      msg = `couldn't decode ${file.name} — this may be an unsupported .meshy variant.`;
-    }
-    setStatus(`error: ${msg}`, 'err');
+    toast(err.message, 'err', 5000);
     console.error(err);
   }
 }
 
 function pickFile() { $picker.click(); }
 
-// ── drag-and-drop (always active, even after a model is loaded) ──────
-addEventListener('dragover', (e) => { e.preventDefault(); $drop.classList.add('show'); });
-addEventListener('dragleave', (e) => { if (e.target === document.body) $drop.classList.remove('show'); });
-addEventListener('drop', (e) => {
+// ── download ──────────────────────────────────────────────────────────
+$dlBtn.addEventListener('click', () => {
+  if (!lastBlobUrl) return;
+  const a = document.createElement('a');
+  a.href = lastBlobUrl;
+  a.download = lastBaseName + '.glb';
+  a.click();
+});
+
+// ── drag-and-drop ─────────────────────────────────────────────────────
+addEventListener('dragover', e => { e.preventDefault(); $drop.classList.add('show'); });
+addEventListener('dragleave', e => { if (e.target === document.body) $drop.classList.remove('show'); });
+addEventListener('drop', e => {
   e.preventDefault();
   $drop.classList.remove('show');
   const file = e.dataTransfer.files[0];
   if (file) loadFile(file);
 });
 
-// ── click-to-pick (empty state + persistent "open file" button) ──────
-$empty.addEventListener('click', pickFile);
-$openBtn.addEventListener('click', pickFile);
+// ── click-to-pick ─────────────────────────────────────────────────────
+$('upload-zone').addEventListener('click', pickFile);
+$('open-btn').addEventListener('click', pickFile);
 $picker.addEventListener('change', () => {
   const file = $picker.files?.[0];
   if (file) loadFile(file);
   $picker.value = '';
 });
+
+// ── settings toggle ───────────────────────────────────────────────────
+$('settings-btn').addEventListener('click', () => $panel.classList.toggle('show'));
+
+// ── sliders ───────────────────────────────────────────────────────────
+function bindSlider(id, setter) {
+  const el = $(id);
+  const val = $('val-' + id.replace('ctrl-', ''));
+  el.addEventListener('input', () => { setter(+el.value); if (val) val.textContent = (+el.value).toFixed(1); });
+}
+bindSlider('ctrl-exposure', v => viewer.setExposure(v));
+bindSlider('ctrl-env',      v => viewer.setEnvIntensity(v));
+bindSlider('ctrl-direct',   v => viewer.setDirectLight(v));
+bindSlider('ctrl-ambient',  v => viewer.setAmbientLight(v));
+
+// ── chips ─────────────────────────────────────────────────────────────
+$('chip-wireframe').addEventListener('click', function() {
+  this.classList.toggle('active');
+  viewer.setWireframe(this.classList.contains('active'));
+});
+$('chip-rotate').addEventListener('click', function() {
+  this.classList.toggle('active');
+  viewer.setAutoRotate(this.classList.contains('active'));
+});
+document.querySelectorAll('[data-bg]').forEach(chip => {
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('[data-bg]').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    viewer.setBackground(chip.dataset.bg);
+  });
+});
+$('reset-cam').addEventListener('click', () => viewer.resetCamera());
 </script>
 
 </body>
