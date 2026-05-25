@@ -2,7 +2,6 @@ import * as THREE          from 'three';
 import { GLTFLoader }       from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls }    from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment }  from 'three/addons/environments/RoomEnvironment.js';
-import { MeshoptDecoder }   from 'three/addons/libs/meshopt_decoder.module.js';
 
 export class Viewer {
   constructor({ container = document.body, background = 0x111111 } = {}) {
@@ -12,7 +11,7 @@ export class Viewer {
     this.renderer.setSize(innerWidth, innerHeight);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 2.0;
+    this.renderer.toneMappingExposure = 1.0;
     this.container.appendChild(this.renderer.domElement);
 
     this.scene = new THREE.Scene();
@@ -27,21 +26,15 @@ export class Viewer {
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
 
-    this.scene.add(new THREE.HemisphereLight(0xffffff, 0x404060, 1.5));
-    const dir = new THREE.DirectionalLight(0xffffff, 2.5);
+    this.scene.add(new THREE.HemisphereLight(0xffffff, 0x202030, 0.6));
+    const dir = new THREE.DirectionalLight(0xffffff, 1.2);
     dir.position.set(3, 5, 2);
     this.scene.add(dir);
-    const fill = new THREE.DirectionalLight(0xffffff, 1.0);
-    fill.position.set(-3, 2, -2);
-    this.scene.add(fill);
 
     addEventListener('resize', () => this._onResize());
 
     this.currentModel = null;
     this.loader = new GLTFLoader();
-    // The decrypted .meshy payload is a GLB that uses EXT_meshopt_compression.
-    // Wire up MeshoptDecoder so the loader can stream-decode it.
-    this.loader.setMeshoptDecoder(MeshoptDecoder);
     this._lastBlobUrl = null;
 
     this._tick();

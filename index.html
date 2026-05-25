@@ -102,7 +102,9 @@
 
 <script type="module">
 import { meshyToGlb, isMeshyFile, isGlbFile } from './src/decrypt.js';
+import { decompressGlb } from './src/decompress.js';
 import { Viewer } from './src/viewer.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 
 const $status  = document.getElementById('status');
 const $drop    = document.getElementById('drop');
@@ -129,7 +131,9 @@ async function handleBuffer(name, buffer) {
     glb = buffer;
   } else if (isMeshyFile(buffer)) {
     setStatus(`decrypting ${name} (${sizeMb} MB)…`);
-    glb = await meshyToGlb(buffer);
+    const intermediate = await meshyToGlb(buffer);
+    setStatus(`decompressing meshopt buffers…`);
+    glb = await decompressGlb(intermediate, MeshoptDecoder);
   } else {
     throw new Error('not a .meshy or .glb file');
   }
