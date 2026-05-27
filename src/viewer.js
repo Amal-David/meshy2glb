@@ -51,6 +51,7 @@ export class Viewer {
     this.camera.aspect = innerWidth / innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(innerWidth, innerHeight);
+    if (this.currentModel) this._frame(this.currentModel);
   }
 
   _tick = () => {
@@ -65,7 +66,7 @@ export class Viewer {
     const center = box.getCenter(new THREE.Vector3());
     const maxDim = Math.max(size.x, size.y, size.z) || 1;
     obj.position.sub(center);
-    const dist = maxDim * 1.8;
+    const dist = maxDim * (this.camera.aspect < 1 ? 2.6 : 1.8);
     this.camera.position.set(dist, dist * 0.7, dist);
     this.camera.near = maxDim / 100;
     this.camera.far  = maxDim * 50;
@@ -116,6 +117,18 @@ export class Viewer {
     if (this.currentModel) this._frame(this.currentModel);
   }
 
+  _applyMaterialSettings(obj) {
+    obj.traverse(o => {
+      if (o.isMesh && o.material) {
+        const materials = Array.isArray(o.material) ? o.material : [o.material];
+        for (const material of materials) {
+          material.envMapIntensity = this._envIntensity;
+          material.wireframe = this._wireframe;
+        }
+      }
+    });
+  }
+
   countTriangles(scene) {
     let n = 0;
     scene.traverse((o) => {
@@ -126,27 +139,30 @@ export class Viewer {
     return n;
   }
 
+  loadObject(object) {
+    if (this.currentModel) this.scene.remove(this.currentModel);
+    this.currentModel = object;
+    this._applyMaterialSettings(this.currentModel);
+    this.scene.add(this.currentModel);
+    this._frame(this.currentModel);
+
+    return {
+      triangles: this.countTriangles(this.currentModel),
+    };
+  }
+
   async loadGLB(glbBuffer) {
     const blob = new Blob([glbBuffer], { type: 'model/gltf-binary' });
     const url  = URL.createObjectURL(blob);
     const gltf = await this.loader.loadAsync(url);
-    if (this.currentModel) this.scene.remove(this.currentModel);
-    this.currentModel = gltf.scene;
-    this.currentModel.traverse(o => {
-      if (o.isMesh && o.material) {
-        o.material.envMapIntensity = this._envIntensity;
-        o.material.wireframe = this._wireframe;
-      }
-    });
-    this.scene.add(this.currentModel);
-    this._frame(this.currentModel);
+    const loaded = this.loadObject(gltf.scene);
 
     if (this._lastBlobUrl) URL.revokeObjectURL(this._lastBlobUrl);
     this._lastBlobUrl = url;
 
     return {
       blobUrl: url,
-      triangles: this.countTriangles(gltf.scene),
+      triangles: loaded.triangles,
       sceneJson: gltf.parser?.json,
     };
   }

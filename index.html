@@ -3,7 +3,38 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>meshy2glb — .meshy to .glb converter</title>
+<title>meshy2glb - Meshy to GLB, glTF, OBJ, STL &amp; USDZ Converter</title>
+<meta name="description" content="Convert Meshy .meshy files and common 3D model formats to GLB, glTF, OBJ, STL, PLY, and USDZ locally in your browser.">
+<meta name="keywords" content="meshy to glb, meshy converter, .meshy converter, Meshy AI, GLB converter, glTF converter, OBJ converter, STL converter, PLY converter, USDZ converter, 3D model converter">
+<meta name="robots" content="index,follow">
+<meta name="author" content="Amal David">
+<meta name="application-name" content="meshy2glb">
+<meta name="theme-color" content="#0f0f1a">
+<link rel="canonical" href="https://amal-david.github.io/meshy2glb/">
+<meta property="og:title" content="meshy2glb - Meshy to GLB and 3D File Converter">
+<meta property="og:description" content="Drop a .meshy, GLB, glTF, OBJ, STL, PLY, DAE, 3MF, or FBX file and export GLB, glTF, OBJ, STL, PLY, or USDZ in-browser.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://amal-david.github.io/meshy2glb/">
+<meta property="og:site_name" content="meshy2glb">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="meshy2glb - Meshy to GLB and 3D File Converter">
+<meta name="twitter:description" content="Convert Meshy and common 3D model files locally in your browser.">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "meshy2glb",
+  "applicationCategory": "MultimediaApplication",
+  "operatingSystem": "Any",
+  "url": "https://amal-david.github.io/meshy2glb/",
+  "description": "Browser-based converter for Meshy .meshy files and common 3D model formats.",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  }
+}
+</script>
 <style>
   :root {
     --bg: #0f0f1a;
@@ -27,6 +58,7 @@
                font: 13px/1.5 var(--font); -webkit-font-smoothing: antialiased; }
   canvas { display: block; }
   button { font: inherit; cursor: pointer; border: none; outline: none; }
+  select { font: inherit; }
   input[type=range] { -webkit-appearance: none; appearance: none; background: transparent; cursor: pointer; }
   input[type=range]::-webkit-slider-track { height: 3px; background: var(--border); border-radius: 2px; }
   input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px;
@@ -52,7 +84,17 @@
   .btn:hover { background: var(--surface-hover); color: #fff; }
   .btn-accent { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 500; }
   .btn-accent:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+  .btn:disabled { opacity: .55; cursor: wait; }
+  .btn:focus-visible, .format-select:focus-visible { box-shadow: 0 0 0 2px rgba(108,138,255,.35); }
   .btn svg { width: 14px; height: 14px; fill: currentColor; }
+  .format-select {
+    display: none; height: 31px; padding: 0 28px 0 10px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    color: var(--text); font-size: 12px; outline: none; cursor: pointer;
+  }
+  .format-select.show { display: inline-flex; }
+  .format-select:disabled { opacity: .55; cursor: wait; }
+  .btn-label { white-space: nowrap; }
 
   /* ── status toast ─────────────────────────────────────────────────── */
   #toast {
@@ -125,6 +167,23 @@
   }
   #foot a { color: var(--text-dim); text-decoration: none; }
   #foot a:hover { color: var(--text); }
+
+  @media (max-width: 640px) {
+    #topbar { padding: 0 8px; gap: 6px; }
+    #topbar .sep, #topbar .info { display: none; }
+    .btn { padding: 6px 10px; }
+    .btn-label { display: none; }
+    .format-select { width: 78px; padding: 0 18px 0 8px; }
+    #empty { padding: 0 18px; }
+    #empty .upload-zone { padding: 36px 22px; }
+    #empty .formats { max-width: 340px; line-height: 1.6; }
+    #panel {
+      top: auto; left: 8px; right: 8px; bottom: 8px; width: auto;
+      max-height: 42vh; overflow-y: auto; padding: 12px;
+    }
+    .ctrl { display: grid; grid-template-columns: 64px 1fr 28px; }
+    #toast { bottom: 16px; width: calc(100vw - 32px); }
+  }
 </style>
 <script type="importmap">
 {
@@ -142,16 +201,24 @@
   <div class="logo">meshy<span>2glb</span></div>
   <div class="sep"></div>
   <div class="info" id="model-info">No model loaded</div>
-  <button class="btn" id="open-btn">
+  <button class="btn" id="open-btn" aria-label="Open file">
     <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-    Open file
+    <span class="btn-label">Open file</span>
   </button>
-  <button class="btn" id="settings-btn">
+  <button class="btn" id="settings-btn" aria-label="Toggle settings">
     <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.69-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.25-1.13.56-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.69 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.25 1.13-.57 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1112 8.4a3.6 3.6 0 010 7.2z"/></svg>
   </button>
-  <button class="btn btn-accent" id="download-btn" style="display:none">
+  <select id="format-select" class="format-select" aria-label="Export format">
+    <option value="glb">GLB</option>
+    <option value="gltf">glTF</option>
+    <option value="obj">OBJ</option>
+    <option value="stl">STL</option>
+    <option value="ply">PLY</option>
+    <option value="usdz">USDZ</option>
+  </select>
+  <button class="btn btn-accent" id="download-btn" style="display:none" aria-label="Export model">
     <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
-    Download .glb
+    <span class="btn-label">Export</span>
   </button>
 </div>
 
@@ -200,10 +267,10 @@
 <div id="empty">
   <div class="upload-zone" id="upload-zone">
     <svg viewBox="0 0 24 24"><path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z"/></svg>
-    <h2>Drop a .meshy file here</h2>
-    <p>or click to browse your files</p>
+    <h2>Drop a 3D file here</h2>
+    <p>or click to browse one or more files</p>
   </div>
-  <div class="formats">Accepts <b>.meshy</b> and <b>.glb</b> files &middot; processed locally, nothing uploaded</div>
+  <div class="formats">Imports <b>.meshy</b>, <b>.glb</b>, <b>.gltf</b>, <b>.obj</b>, <b>.stl</b>, <b>.ply</b>, <b>.dae</b>, <b>.3mf</b>, <b>.fbx</b> &middot; processed locally, nothing uploaded</div>
 </div>
 
 <!-- drop overlay -->
@@ -213,7 +280,7 @@
 <div id="toast" class="hidden"></div>
 
 <!-- file input -->
-<input id="picker" type="file" accept=".meshy,.glb" hidden>
+<input id="picker" type="file" accept=".meshy,.glb,.gltf,.obj,.stl,.ply,.dae,.3mf,.fbx" multiple hidden>
 
 <!-- footer -->
 <div id="foot">
@@ -224,7 +291,20 @@
 import { meshyToGlb, isMeshyFile, isGlbFile } from './src/decrypt.js';
 import { decompressGlb } from './src/decompress.js';
 import { Viewer } from './src/viewer.js';
+import * as THREE from 'three';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
+import { ColladaLoader } from 'three/addons/loaders/ColladaLoader.js';
+import { ThreeMFLoader } from 'three/addons/loaders/3MFLoader.js';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+import { OBJExporter } from 'three/addons/exporters/OBJExporter.js';
+import { STLExporter } from 'three/addons/exporters/STLExporter.js';
+import { PLYExporter } from 'three/addons/exporters/PLYExporter.js';
+import { USDZExporter } from 'three/addons/exporters/USDZExporter.js';
 
 const $ = id => document.getElementById(id);
 const $toast    = $('toast');
@@ -234,6 +314,7 @@ const $picker   = $('picker');
 const $info     = $('model-info');
 const $panel    = $('panel');
 const $dlBtn    = $('download-btn');
+const $format   = $('format-select');
 
 let toastTimer;
 function toast(msg, cls = 'work', duration = 0) {
@@ -244,42 +325,201 @@ function toast(msg, cls = 'work', duration = 0) {
 }
 
 const viewer = new Viewer();
-let lastBlobUrl = null;
 let lastBaseName = '';
+let lastSourceGlbBuffer = null;
+let lastResourceUrls = [];
 
-async function handleBuffer(name, buffer) {
-  $empty.classList.add('hide');
-  const sizeMb = (buffer.byteLength / 1024 / 1024).toFixed(2);
-  lastBaseName = name.replace(/\.(meshy|glb)$/i, '');
+const IMPORT_FORMATS = new Set(['meshy', 'glb', 'gltf', 'obj', 'stl', 'ply', 'dae', '3mf', 'fbx']);
+const IMPORT_FORMAT_LABEL = '.meshy, .glb, .gltf, .obj, .stl, .ply, .dae, .3mf, or .fbx';
 
-  let glb;
-  if (isGlbFile(buffer)) {
-    toast(`Rendering ${name}…`);
-    glb = buffer;
-  } else if (isMeshyFile(buffer)) {
-    toast(`Decrypting ${name} (${sizeMb} MB)…`);
-    const intermediate = await meshyToGlb(buffer);
-    toast('Decompressing mesh data…');
-    glb = await decompressGlb(intermediate, MeshoptDecoder);
-  } else {
-    throw new Error('Not a .meshy or .glb file');
+function extensionFor(name) {
+  return name.toLowerCase().split('.').pop() || '';
+}
+
+function baseNameFor(name) {
+  return name.replace(/\.[^.]+$/u, '');
+}
+
+function revokeUrls(urls) {
+  for (const url of new Set(urls)) URL.revokeObjectURL(url);
+}
+
+function createResourceManager(files) {
+  const manager = new THREE.LoadingManager();
+  const urls = [];
+  const byName = new Map();
+
+  for (const file of files) {
+    const url = URL.createObjectURL(file);
+    urls.push(url);
+    const names = [
+      file.name,
+      `./${file.name}`,
+      encodeURI(file.name),
+      `./${encodeURI(file.name)}`,
+    ];
+    for (const name of names) byName.set(name, url);
   }
 
-  const { blobUrl, triangles } = await viewer.loadGLB(glb);
-  const glbMb = (glb.byteLength / 1024 / 1024).toFixed(2);
-  if (lastBlobUrl) URL.revokeObjectURL(lastBlobUrl);
-  lastBlobUrl = blobUrl;
+  manager.setURLModifier(url => {
+    const clean = decodeURIComponent(url.split(/[?#]/)[0]);
+    const basename = clean.split('/').pop();
+    return byName.get(clean) || byName.get(clean.replace(/^\.\//u, '')) || byName.get(basename) || url;
+  });
 
-  $info.innerHTML = `<b>${lastBaseName}</b> &mdash; ${glbMb} MB &middot; ${triangles.toLocaleString()} triangles`;
+  return { manager, urls };
+}
+
+function parseGltfData(data, manager) {
+  return new Promise((resolve, reject) => {
+    const loader = new GLTFLoader(manager);
+    loader.setMeshoptDecoder(MeshoptDecoder);
+    loader.parse(data, '', gltf => resolve(gltf.scene), reject);
+  });
+}
+
+function meshFromGeometry(geometry) {
+  if (!geometry.attributes.normal) geometry.computeVertexNormals();
+  const material = new THREE.MeshStandardMaterial({ color: 0xe7e9f2, roughness: 0.65, metalness: 0.02 });
+  return new THREE.Mesh(geometry, material);
+}
+
+function assertHasMesh(object) {
+  let hasMesh = false;
+  object.traverse(child => { if (child.isMesh && child.geometry) hasMesh = true; });
+  if (!hasMesh) throw new Error('No renderable mesh found in this file');
+  return object;
+}
+
+async function loadObjectFromFile(file, manager) {
+  const buffer = await file.arrayBuffer();
+  const ext = extensionFor(file.name);
+  const sizeMb = (buffer.byteLength / 1024 / 1024).toFixed(2);
+
+  if (isGlbFile(buffer)) {
+    toast(`Loading ${file.name} (${sizeMb} MB)…`);
+    return {
+      object: assertHasMesh(await parseGltfData(buffer, manager)),
+      sourceFormat: 'glb',
+      sourceGlbBuffer: buffer,
+      sizeBytes: buffer.byteLength,
+    };
+  }
+
+  if (isMeshyFile(buffer)) {
+    toast(`Decrypting ${file.name} (${sizeMb} MB)…`);
+    const intermediate = await meshyToGlb(buffer);
+    toast('Decompressing mesh data…');
+    const glb = await decompressGlb(intermediate, MeshoptDecoder);
+    return {
+      object: assertHasMesh(await parseGltfData(glb, manager)),
+      sourceFormat: 'meshy',
+      sourceGlbBuffer: glb,
+      sizeBytes: glb.byteLength,
+    };
+  }
+
+  if (ext === 'glb') throw new Error('Invalid GLB file');
+  if (ext === 'meshy') throw new Error('Invalid .meshy file');
+  if (!IMPORT_FORMATS.has(ext)) throw new Error(`Unsupported file type. Try ${IMPORT_FORMAT_LABEL}.`);
+
+  toast(`Loading ${file.name} (${sizeMb} MB)…`);
+
+  if (ext === 'gltf') {
+    const text = new TextDecoder().decode(buffer);
+    return {
+      object: assertHasMesh(await parseGltfData(text, manager)),
+      sourceFormat: ext,
+      sizeBytes: buffer.byteLength,
+    };
+  }
+
+  if (ext === 'obj') {
+    const text = new TextDecoder().decode(buffer);
+    return {
+      object: assertHasMesh(new OBJLoader(manager).parse(text)),
+      sourceFormat: ext,
+      sizeBytes: buffer.byteLength,
+    };
+  }
+
+  if (ext === 'stl') {
+    const geometry = new STLLoader(manager).parse(buffer);
+    return {
+      object: meshFromGeometry(geometry),
+      sourceFormat: ext,
+      sizeBytes: buffer.byteLength,
+    };
+  }
+
+  if (ext === 'ply') {
+    const geometry = new PLYLoader(manager).parse(buffer);
+    return {
+      object: meshFromGeometry(geometry),
+      sourceFormat: ext,
+      sizeBytes: buffer.byteLength,
+    };
+  }
+
+  if (ext === 'dae') {
+    const text = new TextDecoder().decode(buffer);
+    return {
+      object: assertHasMesh(new ColladaLoader(manager).parse(text, '').scene),
+      sourceFormat: ext,
+      sizeBytes: buffer.byteLength,
+    };
+  }
+
+  if (ext === '3mf') {
+    return {
+      object: assertHasMesh(new ThreeMFLoader(manager).parse(buffer)),
+      sourceFormat: ext,
+      sizeBytes: buffer.byteLength,
+    };
+  }
+
+  if (ext === 'fbx') {
+    return {
+      object: assertHasMesh(new FBXLoader(manager).parse(buffer, '')),
+      sourceFormat: ext,
+      sizeBytes: buffer.byteLength,
+    };
+  }
+
+  throw new Error(`Unsupported file type. Try ${IMPORT_FORMAT_LABEL}.`);
+}
+
+async function handleFiles(fileList) {
+  const files = Array.from(fileList);
+  const primary = files.find(file => IMPORT_FORMATS.has(extensionFor(file.name)));
+  if (!primary) throw new Error(`No supported 3D file found. Try ${IMPORT_FORMAT_LABEL}.`);
+
+  $empty.classList.add('hide');
+  lastBaseName = baseNameFor(primary.name);
+  const resources = createResourceManager(files);
+
+  try {
+    const loaded = await loadObjectFromFile(primary, resources.manager);
+    const { triangles } = viewer.loadObject(loaded.object);
+    revokeUrls(lastResourceUrls);
+    lastResourceUrls = resources.urls;
+    lastSourceGlbBuffer = loaded.sourceGlbBuffer ?? null;
+    const sizeMb = (loaded.sizeBytes / 1024 / 1024).toFixed(2);
+    $info.innerHTML = `<b>${lastBaseName}</b> &mdash; ${loaded.sourceFormat.toUpperCase()} &middot; ${sizeMb} MB &middot; ${triangles.toLocaleString()} triangles`;
+  } catch (err) {
+    revokeUrls(resources.urls);
+    throw err;
+  }
+
+  $format.classList.add('show');
   $dlBtn.style.display = '';
   $panel.classList.add('show');
   toast('Ready', 'ok', 2000);
 }
 
-async function loadFile(file) {
+async function loadFiles(files) {
   try {
-    const buffer = await file.arrayBuffer();
-    await handleBuffer(file.name, buffer);
+    await handleFiles(files);
   } catch (err) {
     toast(err.message, 'err', 5000);
     console.error(err);
@@ -288,13 +528,98 @@ async function loadFile(file) {
 
 function pickFile() { $picker.click(); }
 
-// ── download ──────────────────────────────────────────────────────────
-$dlBtn.addEventListener('click', () => {
-  if (!lastBlobUrl) return;
+// ── export ────────────────────────────────────────────────────────────
+function saveDownload(data, filename, type) {
+  const blob = data instanceof Blob ? data : new Blob([data], { type });
+  const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = lastBlobUrl;
-  a.download = lastBaseName + '.glb';
+  a.href = url;
+  a.download = filename;
   a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function parseGltf(root, { binary }) {
+  return new Promise((resolve, reject) => {
+    new GLTFExporter().parse(
+      root,
+      result => resolve(result instanceof ArrayBuffer ? result : JSON.stringify(result, null, 2)),
+      reject,
+      { binary, onlyVisible: true },
+    );
+  });
+}
+
+async function exportPayload(format) {
+  if (!viewer.currentModel) throw new Error('No model loaded');
+
+  if (format === 'glb') {
+    return {
+      data: lastSourceGlbBuffer ?? await parseGltf(viewer.currentModel, { binary: true }),
+      extension: 'glb',
+      type: 'model/gltf-binary',
+    };
+  }
+
+  if (format === 'gltf') {
+    return {
+      data: await parseGltf(viewer.currentModel, { binary: false }),
+      extension: 'gltf',
+      type: 'model/gltf+json',
+    };
+  }
+
+  if (format === 'obj') {
+    return {
+      data: new OBJExporter().parse(viewer.currentModel),
+      extension: 'obj',
+      type: 'text/plain',
+    };
+  }
+
+  if (format === 'stl') {
+    return {
+      data: new STLExporter().parse(viewer.currentModel, { binary: true }),
+      extension: 'stl',
+      type: 'model/stl',
+    };
+  }
+
+  if (format === 'ply') {
+    return {
+      data: new PLYExporter().parse(viewer.currentModel, { binary: false }),
+      extension: 'ply',
+      type: 'text/plain',
+    };
+  }
+
+  if (format === 'usdz') {
+    return {
+      data: await new USDZExporter().parseAsync(viewer.currentModel, { maxTextureSize: 2048 }),
+      extension: 'usdz',
+      type: 'model/vnd.usdz+zip',
+    };
+  }
+
+  throw new Error(`Unsupported export format: ${format}`);
+}
+
+$dlBtn.addEventListener('click', async () => {
+  const format = $format.value;
+  try {
+    $dlBtn.disabled = true;
+    $format.disabled = true;
+    toast(`Exporting .${format}…`);
+    const payload = await exportPayload(format);
+    saveDownload(payload.data, `${lastBaseName}.${payload.extension}`, payload.type);
+    toast(`Exported .${payload.extension}`, 'ok', 2000);
+  } catch (err) {
+    toast(err.message, 'err', 5000);
+    console.error(err);
+  } finally {
+    $dlBtn.disabled = false;
+    $format.disabled = false;
+  }
 });
 
 // ── drag-and-drop ─────────────────────────────────────────────────────
@@ -303,16 +628,14 @@ addEventListener('dragleave', e => { if (e.target === document.body) $drop.class
 addEventListener('drop', e => {
   e.preventDefault();
   $drop.classList.remove('show');
-  const file = e.dataTransfer.files[0];
-  if (file) loadFile(file);
+  if (e.dataTransfer.files.length > 0) loadFiles(e.dataTransfer.files);
 });
 
 // ── click-to-pick ─────────────────────────────────────────────────────
 $('upload-zone').addEventListener('click', pickFile);
 $('open-btn').addEventListener('click', pickFile);
 $picker.addEventListener('change', () => {
-  const file = $picker.files?.[0];
-  if (file) loadFile(file);
+  if ($picker.files?.length) loadFiles($picker.files);
   $picker.value = '';
 });
 
