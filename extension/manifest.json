@@ -1,0 +1,9 @@
+{
+  "manifest_version": 3,
+  "name": "meshy2glb — Viewer geometry capture",
+  "version": "0.2.0",
+  "description": "Select visible geometry from a compatible Three.js viewer and save a static GLB. User-initiated, active-tab only.",
+  "permissions": ["activeTab", "scripting"],
+  "action": { "default_popup": "popup.html", "default_title": "Export authorized viewer geometry" },
+  "content_security_policy": { "extension_pages": "script-src 'self'; object-src 'none'" }
+}

@@ -1,0 +1,16 @@
+import { DOMParser } from "@xmldom/xmldom";
+import { Matrix4 } from "three";
+import type { Mesh } from "./types";
+export declare const NS = "http://schemas.microsoft.com/3dmanufacturing/core/2015/02";
+export type Doc = ReturnType<DOMParser["parseFromString"]>;
+export type El = ReturnType<Doc["createElement"]>;
+export declare const xml: (value: string) => Doc;
+export declare const serialize: (doc: Doc) => Uint8Array<ArrayBuffer>;
+export declare const children: (parent: El | globalThis.Element, name: string) => El[];
+export declare const child: (parent: El | globalThis.Element, name: string) => El;
+export declare const meta: (parent: El | undefined, key: string) => string;
+export declare const num: (s: string | null) => number;
+export declare function matrix(value: string | null, scale?: number): Matrix4;
+export declare function readMesh(element: El): Mesh;
+export declare function safePath(path: string): string;
+export declare function checkIds(elements: El[], label: string): void;
