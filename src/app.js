@@ -71,7 +71,10 @@ addEventListener('drop', event => {
   else { const text = (event.dataTransfer.getData('text/uri-list') || event.dataTransfer.getData('text/plain')).split('\n').find(s => s.trim() && !s.startsWith('#'))?.trim(); if (text) { $('model-url').value = text; openUrl(text); } }
 });
 // A handoff URL may prefill the form, but never initiates network access itself.
-try { const text = new URLSearchParams(location.hash.slice(1)).get('url'); if (text) { $('model-url').value = text; history.replaceState(null, '', location.pathname + location.search); status('Link received. Review the URL, then click Open URL.'); } } catch { /* An invalid fragment is not an import. */ }
+function receiveLink() {
+  try { const text = new URLSearchParams(location.hash.slice(1)).get('url'); if (text) { $('model-url').value = text; history.replaceState(null, '', location.pathname + location.search); status('Link received. Review the URL, then click Open URL.'); } } catch { /* An invalid fragment is not an import. */ }
+}
+receiveLink(); addEventListener('hashchange', receiveLink);
 for (const [id, method] of [['exposure','setExposure'], ['environment','setEnvIntensity'], ['direct','setDirectLight'], ['ambient','setAmbientLight']]) $(id).oninput = e => viewer?.[method](Number(e.target.value));
 $('background').onchange = e => viewer?.setBackground(e.target.value);
 for (const [id, method] of [['wireframe','setWireframe'], ['rotate','setAutoRotate']]) $(id).onclick = () => { const on = $(id).getAttribute('aria-pressed') !== 'true'; $(id).setAttribute('aria-pressed', String(on)); viewer?.[method](on); };

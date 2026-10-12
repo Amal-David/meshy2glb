@@ -1,124 +1,92 @@
 # meshy2glb
 
-Browser-based converter and viewer for [meshy.ai](https://meshy.ai)'s
-`.meshy` 3D model files and common 3D formats. Drop files in, preview
-with adjustable lighting, then export as `.glb`, `.gltf`, `.obj`,
-`.stl`, `.ply`, or `.usdz`.
+Open a 3D file or model URL, inspect it locally, and export a standard model or an experimental limited-color paint snapshot.
 
-**Live:** https://amal-david.github.io/meshy2glb/
+**[Live site](https://amal-david.github.io/meshy2glb/)** · **[Asset Lens](https://github.com/Amal-David/asset-capture)** · **[Viewer capture guide](docs/INTEGRATIONS.md)** · **[Algorithm and benchmark](docs/ALGORITHM.md)**
 
-Everything runs client-side — decryption, meshopt decompression, and
-rendering all happen in your browser. No file ever leaves your machine.
+The live site follows the deployed branch. Features in an unmerged pull request are not live yet.
 
-## How it works
+## Three connected entry points
 
-`.meshy` files are AES-256-CTR encrypted glTF/GLB containers with
-meshopt-compressed vertex data. The decoder was built clean-room
-through reverse engineering (no meshy code or WASM in the bundle):
+**Files and folders.** Drop a `.meshy`, GLB, glTF, OBJ, STL, PLY, DAE, 3MF or FBX file. For glTF/OBJ, include its BIN, MTL and texture companions. Folder paths are preserved; ambiguous duplicate filenames produce an error instead of the wrong texture. This is a single-model tool, not a batch converter.
 
-1. **Decrypt** — the first 8 KB of the body is AES-256-CTR encrypted
-   with a fixed 32-byte ASCII key and a per-file nonce from the header.
-   A 16-byte GCM auth tag follows. Everything after is plaintext.
-2. **Decompress** — the decrypted GLB uses `EXT_meshopt_compression`.
-   We run [meshoptimizer](https://github.com/zeux/meshoptimizer)'s JS
-   decoder on every compressed bufferView to produce a standard GLB
-   with raw vertex/index data.
-3. **Render / convert** — three.js loads the model into a shared scene.
-   The viewer provides orbit controls, adjustable lighting, wireframe
-   mode, background presets, and auto-rotate. Exporters serialize that
-   scene into the chosen output format.
+**Model URLs.** Paste or drop a direct HTTPS asset URL. Public Meshy model-page URLs use an experimental public-task resolver. The source must permit browser access through CORS. This is not a proxy or an authentication/download-restriction bypass. Private, expired or blocked resources need an authorized local export. No file contents are sent to our server.
 
-The full pipeline (decrypt → decompress → render) takes ~80 ms for a
-5 MB model.
+**Displayed geometry.** The optional Chrome MV3 extension scans an exposed compatible Three.js scene only after a click, lists visible meshes for explicit selection, and saves their static world-space geometry as GLB. It needs only `activeTab` and `scripting`, not persistent access to every website. See [installation and limitations](docs/INTEGRATIONS.md).
 
-## Features
+Use **Asset Lens**, the companion asset-inspection extension, to find/filter accessible assets on a page. Copy a model URL into meshy2glb or download the asset and open it here. The link is inside the app; Asset Lens itself is not duplicated or modified.
 
-- **Drag-and-drop or click to upload** — accepts `.meshy`, `.glb`,
-  `.gltf`, `.obj`, `.stl`, `.ply`, `.dae`, `.3mf`, and `.fbx`
-- **Lighting controls** — exposure, environment intensity, direct
-  light, ambient light (all real-time sliders)
-- **Display options** — wireframe toggle, auto-rotate, background
-  presets (dark / grey / white / black), camera reset
-- **Multi-format export** — download a standard `.glb`, `.gltf`,
-  `.obj`, `.stl`, `.ply`, or `.usdz` for Blender, Unity, Unreal,
-  slicers, AR preview, and other model tools
-- **Linked asset support** — when loading `.gltf` files, select the
-  `.bin` and texture files alongside the main file so relative asset
-  references can resolve locally
-- Works on any static host — GitHub Pages, Cloudflare Pages, S3,
-  localhost
+## Inspect and export deliberately
 
-## Run locally
+The viewer has orbit controls, lighting/background controls, wireframe, auto-rotate and animation-clip preview. Camera framing and preview materials are separate from original export data.
 
-```bash
-git clone https://github.com/Amal-David/meshy2glb
+Choose the content before choosing the format:
+
+| Content | Meaning |
+| --- | --- |
+| Original asset | Preserve original GLB bytes when available; `.meshy` exports the validated decompressed GLB. Other routes regenerate supported scene data and clips. |
+| Painted static snapshot | Export the processed limited-color surface as vertex-colored GLB or slicer-native painted 3MF. |
+| Displayed geometry only | Bake the current visible pose into a static GLB; omit textures, normals, rigs and animation. |
+
+GLB, glTF, OBJ, STL, PLY and USDZ remain available. The UI explains each route's losses. OBJ export has no MTL/texture package. USDZ approximates Basic/Phong materials and explicitly rejects unsupported arrangements rather than reporting success with missing geometry. Required Draco/KTX2 extensions are not decoded by this build.
+
+## Experimental texture to paint
+
+Choose 2–16 colors, a detail budget and edge-aware cleanup; generate a preview; edit palette swatches; then export. A generated textured cube is available through **Try a textured sample**—no external model is needed.
+
+The independent processing pipeline uses area-weighted Oklab palette fitting, raster contour clipping with shared boundary splits, and a source-contrast-aware Potts objective. Small two-color graphs use a minimum-cut solver; larger or multicolor graphs use monotone local optimization. The [algorithm note](docs/ALGORITHM.md) describes the objective and exact scope of its guarantees.
+
+Native 3MF serialization is **reused from EllsworOpan's `three-mf` bundle in Texture2Paint**, with its MIT license retained. Select PrusaSlicer 2, Bambu Studio or OrcaSlicer encoding, choose millimeters per source unit, and assign printer/filament slots in the destination slicer. GLB/glTF ordinarily uses meters, hence the default 1000 mm/unit; unitless inputs require a deliberate choice.
+
+This is not automatic mesh repair, a printability certificate, a decal baker, or a replacement for the full Texture2Paint project. Transparent paint inputs and GPU-only deformation are unsupported. Features smaller than the chosen raster resolution can disappear; budgets are surfaced explicitly. Output is a static surface, not an animated rig. Native archive roundtrips do not establish successful physical printing.
+
+## Run and verify
+
+For the website, no build is required:
+
+```sh
+git clone https://github.com/Amal-David/meshy2glb.git
 cd meshy2glb
 ./start.sh
 ```
 
-## Tests
+Use HTTPS or localhost for WebCrypto. Runtime Three.js modules are pinned to `0.169.0` on a CDN; client-side processing does not mean the first visit is offline.
 
-```bash
-node --test tests/decrypt.test.mjs
+Node 22 is the tested development target:
+
+```sh
+npm install
+npm test                       # dependency-free core tests; also builds extension
+npm run test:legacy             # historical real-.meshy tests; fixtures may be absent
+npm run benchmark              # writes docs/benchmark.json, all seeded trials
+npx playwright install chromium
+npm run test:browser            # browser export and native archive roundtrips
+npm run build:extension         # dist-extension/, load unpacked in Chrome
 ```
 
-Tests cover format detection, AES-CTR decryption, meshopt decode
-integrity (zero corrupted indices), and GLB structural validation.
-Fixture-driven cases run on any `.meshy` files in `tests/fixtures/`
-or `$MESHY_FIXTURES`.
-
-## File format (reverse-engineered)
-
-```
-Offset          Contents
-────────────    ────────────────────────────────────────────────
-0..7            magic "MESHY.AI"
-8..9            version (uint16 LE, observed: 1)
-10..21          12-byte AES nonce
-22..31          reserved
-32..8224        AES-256-CTR ciphertext (always 8192 bytes)
-8224..8240      16-byte AES-GCM authentication tag
-8240..EOF       plaintext (WebP textures + meshopt streams)
-```
-
-Cipher: AES-256-CTR, key = `JSON{"accessors":[{"bufferView":` (literal
-ASCII), counter = `nonce || uint32be(2)`.
-
-The encrypted 8 KB contains the GLB header, glTF JSON, BIN chunk
-header, and the start of the first buffer view. Everything after the
-16-byte tag is stored in the clear — textures (WebP) and meshopt-
-compressed vertex/index streams.
-
-Full reverse-engineering notes (including dead ends) are in
-[NOTES.md](./NOTES.md).
+The benchmark checks the upstream reference worker's Git blob hash before executing it. CI publishes benchmark JSON, browser traces/screenshots and the built extension as artifacts. Top-level development versions are pinned; use the generated npm lockfile for a reproducible installed dependency graph.
 
 ## Architecture
 
+```text
+src/input.js, model-loader.js   URL/file/resource resolution
+src/glb.js, decrypt.js,
+  decompress.js                validated binary conversion
+src/viewer.js                  independent preview scene/materials
+src/export.js                  explicit export routes
+src/snapshot.js, discovery.js  shared geometry capture and bounded discovery
+src/paint-core.js, binary-cut.js
+src/contours.js, surface.js     independent paint algorithms
+src/paint-adapter.js            Three.js and native 3MF adapters
+src/vendor/three-mf/            attributed upstream slicer-format writer
+extension/                     optional active-tab geometry exporter
+scripts/benchmark.mjs           comparative cleanup experiment
 ```
-src/
-  decrypt.js      AES-256-CTR decryption via WebCrypto (~50 LOC)
-  decompress.js   meshopt decompression → standard GLB (~100 LOC)
-  viewer.js       three.js renderer with controls
-index.html        UI: upload, controls panel, top bar, import/export routing
-tests/
-  decrypt.test.mjs    node:test suite
-  meshopt_decoder.module.js   vendored decoder for offline tests
-```
 
-## Credits
+No analytics, session recording or asset uploads are added. URL import contacts the selected source; the website loads pinned libraries from a CDN. Conversion happens on-device. Only use models you own or have permission to convert/export.
 
-- [zeux/meshoptimizer](https://github.com/zeux/meshoptimizer) — the
-  mesh compression library (MIT)
-- [three.js](https://threejs.org/) — 3D rendering (MIT)
-- [youssef02/meshy2glb](https://github.com/youssef02/meshy2glb) —
-  original Tampermonkey approach
-- [Pouare514/meshy-downloader](https://github.com/Pouare514/meshy-downloader)
-  — Chrome extension with similar in-page intercept
+## Credits and license
 
-## Disclaimer
+This project is MIT licensed. See [THIRD_PARTY.md](docs/THIRD_PARTY.md) for exact reused code, pinned upstream revision, author credits and licenses. Integrations draw on Asset Lens, MeshySec and the original meshy2glb ecosystem; our decoder does not ship Meshy's proprietary WASM. Historical format investigation remains in [NOTES.md](NOTES.md), which is not a current compatibility or performance guarantee.
 
-Not affiliated with [meshy.ai](https://meshy.ai).
-
-## License
-
-[MIT](./LICENSE)
+Not affiliated with Meshy AI. Upstream changes can affect `.meshy` compatibility and the experimental public-page resolver.

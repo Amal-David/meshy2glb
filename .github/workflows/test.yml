@@ -29,6 +29,7 @@ jobs:
           name: verification-and-extension
           path: |
             docs/benchmark.json
+            package-lock.json
             dist-extension/
             test-results/
             playwright-report/

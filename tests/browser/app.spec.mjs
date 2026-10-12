@@ -63,3 +63,10 @@ test('mobile controls remain usable and no asset fetch happens from a fragment a
  await page.goto('/#url='+encodeURIComponent('https://never.example.org/model.glb'));await expect(page.locator('#model-url')).toHaveValue('https://never.example.org/model.glb');expect(requests).toBe(0);expect(page.url()).toBe(origin+'/');
  await page.screenshot({path:'test-results/mobile-entry.png',fullPage:true});
 });
+
+test('extension page bundle captures an explicitly exposed real Three scene',async({page})=>{
+ await page.evaluate(async()=>{const THREE=await import('three');const scene=new THREE.Scene();const model=new THREE.Mesh(new THREE.BoxGeometry(1,1,1),new THREE.MeshBasicMaterial());model.name='Authorized model';model.position.x=4;scene.add(model);const hidden=new THREE.Group();hidden.visible=false;hidden.add(new THREE.Mesh(new THREE.BoxGeometry(),new THREE.MeshBasicMaterial()));scene.add(hidden);window[Symbol.for('meshy2glb.scene')]=scene;});
+ await page.addScriptTag({path:'dist-extension/page-bundle.js'});
+ const result=await page.evaluate(()=>{const api=window[Symbol.for('meshy2glb.capture.v1')],scan=api.scan();return {scan,meshes:api.export(scan.meshes.map(({scene,id})=>({scene,id})))};});
+ expect(result.scan.meshes).toHaveLength(1);expect(Math.min(...result.meshes[0].positions.filter((_,i)=>i%3===0))).toBe(3.5);const glb=geometryGlb(result.meshes),report=await validator.validateBytes(new Uint8Array(glb));expect(report.issues.numErrors).toBe(0);
+});
