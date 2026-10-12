@@ -1,5 +1,8 @@
 .DS_Store
 node_modules/
-*.meshy
-*.glb
+dist-extension/
+playwright-report/
+test-results/
 tests/fixtures/
+docs/benchmark.json
+*.zip

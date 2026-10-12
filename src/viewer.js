@@ -1,169 +1,70 @@
-import * as THREE          from 'three';
-import { GLTFLoader }       from 'three/addons/loaders/GLTFLoader.js';
-import { OrbitControls }    from 'three/addons/controls/OrbitControls.js';
-import { RoomEnvironment }  from 'three/addons/environments/RoomEnvironment.js';
-
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { clone } from 'three/addons/utils/SkeletonUtils.js';
+export function eachMaterial(root, fn) {
+  const seen = new Set(); root?.traverse(o => { if (o.material) for (const m of [].concat(o.material)) if (m && !seen.has(m)) { seen.add(m); fn(m); } });
+}
+export function disposeObject(root) {
+  const geometry = new Set(), textures = new Set(); root?.traverse(o => { if (o.geometry) geometry.add(o.geometry); });
+  eachMaterial(root, m => { for (const v of Object.values(m)) if (v?.isTexture) textures.add(v); m.dispose(); });
+  for (const g of geometry) g.dispose(); for (const t of textures) t.dispose();
+}
 export class Viewer {
-  constructor({ container = document.body, background = 0x1a1a2e } = {}) {
-    this.container = container;
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    this.renderer.setPixelRatio(devicePixelRatio);
-    this.renderer.setSize(innerWidth, innerHeight);
-    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.0;
-    this.container.appendChild(this.renderer.domElement);
-
-    this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(background);
-
-    const pmrem = new THREE.PMREMGenerator(this.renderer);
-    this._envTexture = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    this.scene.environment = this._envTexture;
-    this._envIntensity = 1.0;
-
-    this.camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.01, 1000);
-    this.camera.position.set(2, 1.5, 3);
-
-    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-    this.controls.enableDamping = true;
-    this.controls.autoRotate = false;
-    this.controls.autoRotateSpeed = 2.0;
-
-    this._hemiLight = new THREE.HemisphereLight(0xffffff, 0x202030, 0.6);
-    this.scene.add(this._hemiLight);
-    this._dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
-    this._dirLight.position.set(3, 5, 2);
-    this.scene.add(this._dirLight);
-
-    this._wireframe = false;
-
-    addEventListener('resize', () => this._onResize());
-
-    this.currentModel = null;
-    this.loader = new GLTFLoader();
-    this._lastBlobUrl = null;
-
-    this._tick();
-  }
-
-  _onResize() {
-    this.camera.aspect = innerWidth / innerHeight;
-    this.camera.updateProjectionMatrix();
-    this.renderer.setSize(innerWidth, innerHeight);
-    if (this.currentModel) this._frame(this.currentModel);
-  }
-
-  _tick = () => {
-    this.controls.update();
-    this.renderer.render(this.scene, this.camera);
-    requestAnimationFrame(this._tick);
-  };
-
-  _frame(obj) {
-    const box    = new THREE.Box3().setFromObject(obj);
-    const size   = box.getSize(new THREE.Vector3());
-    const center = box.getCenter(new THREE.Vector3());
-    const maxDim = Math.max(size.x, size.y, size.z) || 1;
-    obj.position.sub(center);
-    const dist = maxDim * (this.camera.aspect < 1 ? 2.6 : 1.8);
-    this.camera.position.set(dist, dist * 0.7, dist);
-    this.camera.near = maxDim / 100;
-    this.camera.far  = maxDim * 50;
-    this.camera.updateProjectionMatrix();
-    this.controls.target.set(0, 0, 0);
-    this.controls.update();
-  }
-
-  setExposure(v) {
-    this.renderer.toneMappingExposure = v;
-  }
-
-  setEnvIntensity(v) {
-    this._envIntensity = v;
-    if (this.currentModel) {
-      this.currentModel.traverse(o => {
-        if (o.isMesh && o.material) o.material.envMapIntensity = v;
-      });
-    }
-  }
-
-  setDirectLight(v) {
-    this._dirLight.intensity = v;
-  }
-
-  setAmbientLight(v) {
-    this._hemiLight.intensity = v;
-  }
-
-  setBackground(hex) {
-    this.scene.background = new THREE.Color(hex);
-  }
-
-  setAutoRotate(on) {
-    this.controls.autoRotate = on;
-  }
-
-  setWireframe(on) {
-    this._wireframe = on;
-    if (this.currentModel) {
-      this.currentModel.traverse(o => {
-        if (o.isMesh && o.material) o.material.wireframe = on;
-      });
-    }
-  }
-
-  resetCamera() {
-    if (this.currentModel) this._frame(this.currentModel);
-  }
-
-  _applyMaterialSettings(obj) {
-    obj.traverse(o => {
-      if (o.isMesh && o.material) {
-        const materials = Array.isArray(o.material) ? o.material : [o.material];
-        for (const material of materials) {
-          material.envMapIntensity = this._envIntensity;
-          material.wireframe = this._wireframe;
-        }
-      }
+  constructor({ container = document.body } = {}) {
+    this.container = container; this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); this.renderer.outputColorSpace = THREE.SRGBColorSpace; this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    container.appendChild(this.renderer.domElement); this.scene = new THREE.Scene(); this.scene.background = new THREE.Color('#1a1a2e');
+    const pmrem = new THREE.PMREMGenerator(this.renderer), room = new RoomEnvironment(); this.env = pmrem.fromScene(room, 0.04).texture; this.scene.environment = this.env; pmrem.dispose(); room.dispose?.();
+    this.camera = new THREE.PerspectiveCamera(45, 1, 0.01, 1000); this.camera.position.set(2, 1.5, 3);
+    this.controls = new OrbitControls(this.camera, this.renderer.domElement); this.controls.enableDamping = true;
+    this.hemi = new THREE.HemisphereLight(0xffffff, 0x202030, 0.6); this.direct = new THREE.DirectionalLight(0xffffff, 1.2); this.direct.position.set(3, 5, 2); this.scene.add(this.hemi, this.direct);
+    this.wireframe = false; this.envIntensity = 1; this.dirty = true; this.currentModel = null;
+    this.controls.addEventListener('change', () => this.dirty = true);
+    this.resizeObserver = new ResizeObserver(() => this.resize()); this.resizeObserver.observe(container); this.resize();
+    let last = performance.now();
+    this.renderer.setAnimationLoop(time => {
+      const delta = Math.min(0.05, Math.max(0, (time - last) / 1000)); last = time;
+      if (document.hidden) return;
+      this.mixer?.update(delta); const moved = this.controls.update();
+      if (moved || this.dirty || this.mixer) { this.renderer.render(this.scene, this.camera); this.dirty = false; }
     });
   }
-
-  countTriangles(scene) {
-    let n = 0;
-    scene.traverse((o) => {
-      if (!o.isMesh || !o.geometry) return;
-      const idx = o.geometry.index;
-      n += (idx ? idx.count : o.geometry.attributes.position.count) / 3;
-    });
-    return n;
+  resize() {
+    const w = Math.max(1, this.container.clientWidth), h = Math.max(1, this.container.clientHeight);
+    this.renderer.setSize(w, h); this.camera.aspect = w / h; this.camera.updateProjectionMatrix(); this.dirty = true;
   }
-
   loadObject(object) {
-    if (this.currentModel) this.scene.remove(this.currentModel);
-    this.currentModel = object;
-    this._applyMaterialSettings(this.currentModel);
-    this.scene.add(this.currentModel);
-    this._frame(this.currentModel);
-
-    return {
-      triangles: this.countTriangles(this.currentModel),
-    };
+    const next = clone(object);
+    this.play(null);
+    if (this.currentModel) { this.scene.remove(this.currentModel); eachMaterial(this.currentModel, m => m.dispose()); }
+    this.currentModel = next;
+    const materials = new Map(); this.currentModel.traverse(o => {
+      if (!o.material) return;
+      const copy = m => { if (!materials.has(m)) { const n = m.clone(); n.wireframe = this.wireframe; n.envMapIntensity = this.envIntensity; materials.set(m, n); } return materials.get(m); };
+      o.material = Array.isArray(o.material) ? o.material.map(copy) : copy(o.material);
+    });
+    this.scene.add(this.currentModel); this.resetCamera();
   }
-
-  async loadGLB(glbBuffer) {
-    const blob = new Blob([glbBuffer], { type: 'model/gltf-binary' });
-    const url  = URL.createObjectURL(blob);
-    const gltf = await this.loader.loadAsync(url);
-    const loaded = this.loadObject(gltf.scene);
-
-    if (this._lastBlobUrl) URL.revokeObjectURL(this._lastBlobUrl);
-    this._lastBlobUrl = url;
-
-    return {
-      blobUrl: url,
-      triangles: loaded.triangles,
-      sceneJson: gltf.parser?.json,
-    };
+  resetCamera() {
+    if (!this.currentModel) return;
+    const box = new THREE.Box3().setFromObject(this.currentModel), center = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3());
+    const radius = Math.max(size.length() / 2, 0.001), fov = Math.min(this.camera.fov * Math.PI / 180, 2 * Math.atan(Math.tan(this.camera.fov * Math.PI / 360) * this.camera.aspect));
+    const distance = radius / Math.sin(fov / 2) * 1.15;
+    this.camera.position.copy(center).add(new THREE.Vector3(1, 0.65, 1).normalize().multiplyScalar(distance));
+    this.camera.near = radius / 1000; this.camera.far = distance + radius * 100; this.camera.updateProjectionMatrix(); this.controls.target.copy(center); this.controls.update(); this.dirty = true;
   }
+  setWireframe(on) { this.wireframe = on; eachMaterial(this.currentModel, m => m.wireframe = on); this.dirty = true; }
+  setEnvIntensity(v) { this.envIntensity = v; eachMaterial(this.currentModel, m => m.envMapIntensity = v); this.dirty = true; }
+  setExposure(v) { this.renderer.toneMappingExposure = v; this.dirty = true; }
+  setDirectLight(v) { this.direct.intensity = v; this.dirty = true; }
+  setAmbientLight(v) { this.hemi.intensity = v; this.dirty = true; }
+  setBackground(v) { this.scene.background.set(v); this.dirty = true; }
+  setAutoRotate(on) { this.controls.autoRotate = on; this.dirty = true; }
+  play(clip) {
+    if (this.mixer) { this.mixer.stopAllAction(); this.mixer.uncacheRoot(this.currentModel); this.mixer = null; }
+    if (clip && this.currentModel) { this.mixer = new THREE.AnimationMixer(this.currentModel); this.mixer.clipAction(clip).play(); }
+    this.dirty = true;
+  }
+  dispose() { this.renderer.setAnimationLoop(null); this.play(null); this.resizeObserver.disconnect(); this.controls.dispose(); eachMaterial(this.currentModel, m => m.dispose()); this.env.dispose(); this.renderer.dispose(); }
 }

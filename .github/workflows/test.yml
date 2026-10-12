@@ -1,0 +1,35 @@
+name: Conversion and paint verification
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm test
+      - run: npm run test:legacy
+      - run: npm run benchmark
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
+      - name: Record benchmark summary
+        if: always()
+        run: |
+          node --input-type=module -e "import fs from 'node:fs'; const p='docs/benchmark.json'; if(fs.existsSync(p)) { const r=JSON.parse(fs.readFileSync(p)); fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, '# Synthetic cleanup benchmark\n\n'+r.scope+'\n\n'+JSON.stringify(r.summary,null,2)); }"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verification-and-extension
+          path: |
+            docs/benchmark.json
+            package-lock.json
+            dist-extension/
+            test-results/
+            playwright-report/

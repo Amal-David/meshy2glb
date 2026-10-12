@@ -1,0 +1,19 @@
+{
+  "name": "meshy2glb",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/unit/*.test.mjs",
+    "test:legacy": "node --test tests/decrypt.test.mjs",
+    "test:browser": "playwright test",
+    "benchmark": "node scripts/benchmark.mjs",
+    "build:extension": "node scripts/build-extension.mjs",
+    "pretest": "node scripts/build-extension.mjs"
+  },
+  "devDependencies": {
+    "three": "0.169.0",
+    "@playwright/test": "1.57.0",
+    "gltf-validator": "2.0.0-dev.3.10"
+  }
+}
