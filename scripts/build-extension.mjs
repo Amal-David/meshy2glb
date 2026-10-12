@@ -4,6 +4,8 @@ const root = resolve(import.meta.dirname, '..'), out = resolve(root, 'dist-exten
 await mkdir(out, { recursive: true });
 for (const file of ['manifest.json','popup.html','popup.css','popup.js']) await copyFile(resolve(root,'extension',file),resolve(out,file));
 await copyFile(resolve(root,'src/glb.js'),resolve(out,'glb.js'));
+await copyFile(resolve(root,'LICENSE'),resolve(out,'LICENSE'));
+await copyFile(resolve(root,'docs/INTEGRATIONS.md'),resolve(out,'README.md'));
 let bundle = '(() => {\n"use strict";\n';
 for (const file of ['src/discovery.js','src/snapshot.js','extension/page.js']) {
   const source = await readFile(resolve(root,file),'utf8');
