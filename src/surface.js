@@ -39,22 +39,31 @@ export function refineSurface(input, sample, palette, { levels = 2, maxTriangles
   }
   return { triangles, budgetReached };
 }
-function wrap(x, mode) {
-  if (mode === 1000) return ((x % 1) + 1) % 1;
-  if (mode === 1002) { const n = Math.floor(x), f = x - n; return Math.abs(n) % 2 ? 1 - f : f; }
-  return Math.max(0, Math.min(1, x));
+// Wrap each integer texel tap, including taps across a repeat seam.
+function texelIndex(index, size, mode) {
+  if (mode === 1000) return ((index % size) + size) % size;
+  if (mode === 1002) { const period = size * 2, at = ((index % period) + period) % period; return at < size ? at : period - 1 - at; }
+  return Math.max(0, Math.min(size - 1, index));
 }
 export function sampleMaterial(vertex, material) {
   const factor = vertex.linear.map((c, i) => c * material.linear[i]);
   const tex = material.texture; if (!tex) return factor.map(linearToSrgb);
   const m = tex.matrix, [u, v] = vertex.uv;
-  let x = wrap(m[0] * u + m[3] * v + m[6], tex.wrapS), y = wrap(m[1] * u + m[4] * v + m[7], tex.wrapT);
+  let x = m[0] * u + m[3] * v + m[6], y = m[1] * u + m[4] * v + m[7];
   if (tex.flipY) y = 1 - y;
-  x *= tex.width - 1; y *= tex.height - 1;
-  const x0 = Math.floor(x), y0 = Math.floor(y), x1 = Math.min(x0 + 1, tex.width - 1), y1 = Math.min(y0 + 1, tex.height - 1);
-  const tx = x - x0, ty = y - y0, values = [0, 0, 0]; let alpha = 0;
-  const taps = tex.nearest ? [[Math.round(x), Math.round(y), 1]] : [[x0, y0, (1-tx)*(1-ty)], [x1, y0, tx*(1-ty)], [x0, y1, (1-tx)*ty], [x1, y1, tx*ty]];
-  for (const [px, py, w] of taps) {
+  x *= tex.width; y *= tex.height;
+  let taps;
+  if (tex.nearest) taps = [[Math.floor(x), Math.floor(y), 1]];
+  else {
+    // Normalized texture coordinates address texel centers at (i + 0.5) / size.
+    x -= 0.5; y -= 0.5;
+    const x0 = Math.floor(x), y0 = Math.floor(y), tx = x - x0, ty = y - y0;
+    taps = [[x0, y0, (1-tx)*(1-ty)], [x0+1, y0, tx*(1-ty)], [x0, y0+1, (1-tx)*ty], [x0+1, y0+1, tx*ty]];
+  }
+  const values = [0, 0, 0]; let alpha = 0;
+  for (const [ix, iy, w] of taps) {
+    if (w === 0) continue;
+    const px = texelIndex(ix, tex.width, tex.wrapS), py = texelIndex(iy, tex.height, tex.wrapT);
     const offset = (py * tex.width + px) * 4; alpha += tex.data[offset + 3] / 255 * w;
     for (let c = 0; c < 3; c++) { const s = tex.data[offset + c] / 255; values[c] += (tex.srgb ? srgbToLinear(s) : s) * w; }
   }

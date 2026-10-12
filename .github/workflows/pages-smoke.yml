@@ -1,0 +1,21 @@
+name: Verify live GitHub Pages
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: pages-smoke
+  cancel-in-progress: true
+jobs:
+  smoke:
+    if: github.repository == 'Amal-David/meshy2glb'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify published application bytes
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: python3 scripts/check-pages.py

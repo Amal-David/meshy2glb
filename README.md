@@ -2,9 +2,13 @@
 
 Open a 3D file or model URL, inspect it locally, and export a standard model or an experimental limited-color paint snapshot.
 
-**[Live site](https://amal-david.github.io/meshy2glb/)** · **[Asset Lens](https://github.com/Amal-David/asset-capture)** · **[Viewer capture guide](docs/INTEGRATIONS.md)** · **[Algorithm and benchmark](docs/ALGORITHM.md)**
+## [Open the live app → amal-david.github.io/meshy2glb](https://amal-david.github.io/meshy2glb/)
 
-The live site follows the deployed branch. Features in an unmerged pull request are not live yet.
+No installation or account is needed for the browser converter. Start with **Try a textured sample**, open your own file, or paste an accessible model URL.
+
+**[Asset Lens](https://github.com/Amal-David/asset-capture)** · **[Viewer capture guide](docs/INTEGRATIONS.md)** · **[Algorithm and benchmark](docs/ALGORITHM.md)** · **[Deployment](docs/DEPLOYMENT.md)**
+
+GitHub Pages publishes the root of `main`. The live-site verification workflow checks that the published application files match the merged commit. Unmerged pull-request changes are not part of the live site.
 
 ## Three connected entry points
 
@@ -55,7 +59,7 @@ Use HTTPS or localhost for WebCrypto. Runtime Three.js modules are pinned to `0.
 Node 22 is the tested development target:
 
 ```sh
-npm install
+npm ci
 npm test                       # dependency-free core tests; also builds extension
 npm run test:legacy             # historical real-.meshy tests; fixtures may be absent
 npm run benchmark              # writes docs/benchmark.json, all seeded trials
@@ -64,7 +68,7 @@ npm run test:browser            # browser export and native archive roundtrips
 npm run build:extension         # dist-extension/, load unpacked in Chrome
 ```
 
-The benchmark checks the upstream reference worker's Git blob hash before executing it. CI publishes benchmark JSON, browser traces/screenshots and the built extension as artifacts. Top-level development versions are pinned; use the generated npm lockfile for a reproducible installed dependency graph.
+The benchmark checks the upstream reference worker's Git blob hash before executing it. CI publishes benchmark JSON, browser traces/screenshots and the built extension as artifacts. Development dependencies are pinned through the committed npm lockfile.
 
 ## Architecture
 
@@ -81,6 +85,7 @@ src/paint-adapter.js            Three.js and native 3MF adapters
 src/vendor/three-mf/            attributed upstream slicer-format writer
 extension/                     optional active-tab geometry exporter
 scripts/benchmark.mjs           comparative cleanup experiment
+scripts/check-pages.py         public deployment verification
 ```
 
 No analytics, session recording or asset uploads are added. URL import contacts the selected source; the website loads pinned libraries from a CDN. Conversion happens on-device. Only use models you own or have permission to convert/export.
