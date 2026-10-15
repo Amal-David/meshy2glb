@@ -148,8 +148,8 @@ Offset        Contents
 8..9          version (uint16 LE, 1)
 10..21        12-byte AES nonce
 22..31        reserved
-32..8224      AES-256-CTR ciphertext (always 8192 bytes)
-8224..8240    16-byte AES-GCM tag (skipped)
+32..8223      AES-256-CTR ciphertext (always 8192 bytes)
+8224..8239    16-byte AES-GCM tag (skipped)
 8240..EOF     plaintext: textures and meshopt-compressed streams
 ```
 
