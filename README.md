@@ -162,7 +162,7 @@ The decoder was written from reverse engineering; it does not ship Meshy's WASM.
 ## Privacy
 
 - Model files are processed in the browser and never uploaded.
-- **Open URL** contacts only the host in the URL (and, for Meshy pages, Meshy's public task endpoint), with cookies and referrer turned off.
+- **Open URL** sends requests with cookies and referrer turned off. It contacts the host in the URL, any host that host redirects to, and the host serving the model's companion files. For a Meshy page it first asks Meshy's public task endpoint for the model, then downloads the model from the host that endpoint returns, which can be a different server such as a CDN.
 - The page loads Three.js `0.169.0` from a CDN, so the first visit needs a network connection.
 - No analytics or session recording.
 
