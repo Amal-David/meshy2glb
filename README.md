@@ -1,97 +1,267 @@
 # meshy2glb
 
-Open a 3D file or model URL, inspect it locally, and export a standard model or an experimental limited-color paint snapshot.
+[![Tests](https://github.com/Amal-David/meshy2glb/actions/workflows/test.yml/badge.svg)](https://github.com/Amal-David/meshy2glb/actions/workflows/test.yml)
+[![Live site](https://github.com/Amal-David/meshy2glb/actions/workflows/pages-smoke.yml/badge.svg)](https://github.com/Amal-David/meshy2glb/actions/workflows/pages-smoke.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-## [Open the live app → amal-david.github.io/meshy2glb](https://amal-david.github.io/meshy2glb/)
+A browser app that opens `.meshy` files and other 3D models, lets you inspect them, and exports them as GLB, glTF, OBJ, STL, PLY, USDZ or a painted 3MF for 3D printing.
 
-No installation or account is needed for the browser converter. Start with **Try a textured sample**, open your own file, or paste an accessible model URL.
+**[Open the app → amal-david.github.io/meshy2glb](https://amal-david.github.io/meshy2glb/)**
 
-**[Asset Lens](https://github.com/Amal-David/asset-capture)** · **[Viewer capture guide](docs/INTEGRATIONS.md)** · **[Algorithm and benchmark](docs/ALGORITHM.md)** · **[Deployment](docs/DEPLOYMENT.md)**
+Conversion runs in your browser. Models are not uploaded anywhere, and there is no account, analytics or install step.
 
-GitHub Pages publishes the root of `main`. The live-site verification workflow checks that the published application files match the merged commit. Unmerged pull-request changes are not part of the live site.
+![meshy2glb showing the built-in textured sample with the open, inspect and lighting controls](docs/images/viewer.png)
 
-## Three connected entry points
+## Contents
 
-**Files and folders.** Drop a `.meshy`, GLB, glTF, OBJ, STL, PLY, DAE, 3MF or FBX file. For glTF/OBJ, include its BIN, MTL and texture companions. Folder paths are preserved; ambiguous duplicate filenames produce an error instead of the wrong texture. This is a single-model tool, not a batch converter.
+- [Features](#features)
+- [Quick start](#quick-start)
+- [Supported formats](#supported-formats)
+- [Usage](#usage)
+- [Texture to paint (experimental)](#texture-to-paint-experimental)
+- [Chrome extension (optional)](#chrome-extension-optional)
+- [How `.meshy` decoding works](#how-meshy-decoding-works)
+- [Privacy](#privacy)
+- [Limitations](#limitations)
+- [Troubleshooting](#troubleshooting)
+- [Development](#development)
+- [Project structure](#project-structure)
+- [Documentation](#documentation)
+- [Credits](#credits)
+- [License](#license)
 
-**Model URLs.** Paste or drop a direct HTTPS asset URL. Public Meshy model-page URLs use an experimental public-task resolver. The source must permit browser access through CORS. This is not a proxy or an authentication/download-restriction bypass. Private, expired or blocked resources need an authorized local export. No file contents are sent to our server.
+## Features
 
-**Displayed geometry.** The optional Chrome MV3 extension scans an exposed compatible Three.js scene only after a click, lists visible meshes for explicit selection, and saves their static world-space geometry as GLB. It needs only `activeTab` and `scripting`, not persistent access to every website. See [installation and limitations](docs/INTEGRATIONS.md).
+- **Open `.meshy` files.** Decrypts and decompresses Meshy's container into a standard GLB that Blender, Unity, Unreal and other glTF tools can read.
+- **Open common 3D formats.** GLB, glTF, OBJ, STL, PLY, DAE, 3MF and FBX, from files, a whole folder, or an HTTPS link.
+- **Inspect the model.** Orbit camera, wireframe, auto-rotate, exposure and lighting sliders, background presets and animation-clip preview.
+- **Export.** GLB, glTF, OBJ, STL, PLY and USDZ. The app shows what each format keeps and drops before you export.
+- **Texture to paint (experimental).** Reduce a textured model to 2–16 colors and export a painted 3MF for PrusaSlicer 2, Bambu Studio or OrcaSlicer.
+- **Chrome extension (optional).** Save the visible geometry from a Three.js viewer on a page you are allowed to export from.
 
-Use **Asset Lens**, the companion asset-inspection extension, to find/filter accessible assets on a page. Copy a model URL into meshy2glb or download the asset and open it here. The link is inside the app; Asset Lens itself is not duplicated or modified.
+## Quick start
 
-## Inspect and export deliberately
+1. Open **[amal-david.github.io/meshy2glb](https://amal-david.github.io/meshy2glb/)**.
+2. Drop a model onto the page, click **Choose files**, or paste a URL and click **Open URL**. To try the app without a file, click **Try a textured sample**.
+3. Inspect the model in the viewer.
+4. In **Export**, pick the content and format, then click **Export**.
 
-The viewer has orbit controls, lighting/background controls, wireframe, auto-rotate and animation-clip preview. Camera framing and preview materials are separate from original export data.
+To run it on your own machine instead, see [Development](#development).
 
-Choose the content before choosing the format:
+## Supported formats
 
-| Content | Meaning |
+### Import
+
+| Format | Notes |
 | --- | --- |
-| Original asset | Preserve original GLB bytes when available; `.meshy` exports the validated decompressed GLB. Other routes regenerate supported scene data and clips. |
-| Painted static snapshot | Export the processed limited-color surface as vertex-colored GLB or slicer-native painted 3MF. |
-| Displayed geometry only | Bake the current visible pose into a static GLB; omit textures, normals, rigs and animation. |
+| `.meshy` | Meshy container, version 1. Converted to a standard GLB. |
+| GLB | Original bytes are kept for GLB export when possible. |
+| glTF | Select the `.bin` and texture files too, or use **Choose folder**. |
+| OBJ | Select the `.mtl` and texture files too, or use **Choose folder**. |
+| STL, PLY, DAE, 3MF, FBX | Loaded through the Three.js loaders. |
 
-GLB, glTF, OBJ, STL, PLY and USDZ remain available. The UI explains each route's losses. OBJ export has no MTL/texture package. USDZ approximates Basic/Phong materials and explicitly rejects unsupported arrangements rather than reporting success with missing geometry. Required Draco/KTX2 extensions are not decoded by this build.
+Files up to 256 MiB are accepted. The app opens one model at a time; it is not a batch converter.
 
-## Experimental texture to paint
+### Export
 
-Choose 2–16 colors, a detail budget and edge-aware cleanup; generate a preview; edit palette swatches; then export. A generated textured cube is available through **Try a textured sample**—no external model is needed.
+| Format | What it keeps |
+| --- | --- |
+| GLB | Original bytes when available; otherwise regenerated scene data and animation clips. |
+| glTF | Self-contained file with embedded resources and supported clips. |
+| OBJ | Geometry and UVs. No `.mtl`, textures or animation. |
+| STL | Geometry only. Binary STL, no units recorded. |
+| PLY | Geometry, normals and vertex colors. No image textures. |
+| USDZ | Static model for AR Quick Look. Rejects rigged, instanced, multi-material and vertex-colored meshes instead of exporting them incorrectly. |
+| Painted 3MF | Only for a painted snapshot. Up to 16 filament regions. |
 
-The independent processing pipeline uses area-weighted Oklab palette fitting, raster contour clipping with shared boundary splits, and a source-contrast-aware Potts objective. Small two-color graphs use a minimum-cut solver; larger or multicolor graphs use monotone local optimization. The [algorithm note](docs/ALGORITHM.md) describes the objective and exact scope of its guarantees.
+## Usage
 
-Native 3MF serialization is **reused from EllsworOpan's `three-mf` bundle in Texture2Paint**, with its MIT license retained. Select PrusaSlicer 2, Bambu Studio or OrcaSlicer encoding, choose millimeters per source unit, and assign printer/filament slots in the destination slicer. GLB/glTF ordinarily uses meters, hence the default 1000 mm/unit; unitless inputs require a deliberate choice.
+### Open a model
 
-This is not automatic mesh repair, a printability certificate, a decal baker, or a replacement for the full Texture2Paint project. Transparent paint inputs and GPU-only deformation are unsupported. Features smaller than the chosen raster resolution can disappear; budgets are surfaced explicitly. Output is a static surface, not an animated rig. Native archive roundtrips do not establish successful physical printing.
+- **Files.** Drag files onto the page or click **Choose files**. For glTF and OBJ, include the companion `.bin`, `.mtl` and image files in the same selection.
+- **Folders.** **Choose folder** keeps relative paths, so textures referenced as `textures/wood.png` resolve. If two files in the folder share a name and the reference is ambiguous, the app reports an error rather than guessing.
+- **URLs.** Paste a direct HTTPS link to a model file, or a public Meshy model page (`https://www.meshy.ai/3d-models/...`). The source server must allow cross-origin (CORS) requests from the browser. The app does not use a proxy and does not send cookies, so private, expired or login-protected links will not open; download those files and open them locally.
 
-## Run and verify
+Another page can prefill the URL field by linking to `https://amal-david.github.io/meshy2glb/#url=<encoded HTTPS URL>`. Nothing is fetched until you click **Open URL**.
 
-For the website, no build is required:
+To find a model's URL on a web page, use the companion [Asset Lens](https://github.com/Amal-David/asset-capture) extension.
 
-```sh
+### Inspect
+
+The **Inspect** panel controls the preview only: wireframe, auto-rotate, reset view, exposure, environment, direct and ambient light, and background (dark, light or black). None of these settings change what gets exported.
+
+### Export
+
+Pick what to export under **Content**, then a **Format**:
+
+| Content | What you get |
+| --- | --- |
+| Original asset | The model as loaded. A `.meshy` file exports as its decompressed GLB. |
+| Painted static snapshot | The limited-color result from [Texture to paint](#texture-to-paint-experimental), as a vertex-colored GLB or a painted 3MF. |
+| Displayed geometry only (static) | The current pose baked into a static GLB, without textures, normals, rigs or animation. GLB only. |
+
+## Texture to paint (experimental)
+
+![The Texture to paint panel after generating a 4-color palette for the sample model](docs/images/paint.png)
+
+This turns a textured model into a small set of flat color regions that a multi-material 3D printer can print.
+
+1. Load a textured model, or click **Try a textured sample**.
+2. In **Texture to paint**, set **Colors** (2–16), **Detail** (existing faces, or 64–512 px) and **Edge-aware cleanup**.
+3. Click **Generate paint**. Use **View original** to compare.
+4. Optionally click a swatch to change a color, then **Apply edited palette**.
+5. In **Export**, choose **Painted static snapshot** and **Painted 3MF**. Pick the **Slicer encoding** (PrusaSlicer 2, Bambu Studio or OrcaSlicer) and **Millimeters per model unit**.
+6. Open the 3MF in your slicer and assign filaments to each color.
+
+The default scale is 1000 mm per unit because glTF uses meters. Change it if your model uses other units.
+
+The result is a static, painted surface. It does not repair meshes, check printability, keep animation, or handle transparent textures. Details smaller than the chosen resolution may disappear. The color fitting uses Oklab, and cleanup keeps edges where the source texture has strong contrast; [docs/ALGORITHM.md](docs/ALGORITHM.md) has the method, budgets and a benchmark against Texture2Paint.
+
+The 3MF writer is reused from [EllsworOpan's Texture2Paint](https://github.com/EllsworOpan/Texture2Paint) under its MIT license.
+
+## Chrome extension (optional)
+
+The extension saves the geometry that a Three.js viewer is currently showing, for pages where you have permission to export the model.
+
+```bash
+npm ci
+npm run build:extension
+```
+
+Then in Chrome:
+
+1. Open `chrome://extensions` and turn on **Developer mode**.
+2. Click **Load unpacked** and select the `dist-extension` folder.
+3. On the model's page, click the extension icon, then **Scan this tab**.
+4. Select the meshes you want and save the GLB.
+5. Open that GLB in meshy2glb to convert it to another format.
+
+The extension asks only for `activeTab` and `scripting`, and runs on a page only after you click **Scan this tab**. It saves geometry only: no materials, textures, rigs or animation, and up to 250,000 triangles. It cannot capture closed or non-Three.js renderers, and it may not work on Meshy's own viewer. See [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) for details and for exposing a scene from your own app.
+
+## How `.meshy` decoding works
+
+A `.meshy` file is a GLB wrapped in a thin encryption layer:
+
+```text
+Offset        Contents
+0..7          magic "MESHY.AI"
+8..9          version (uint16 LE, 1)
+10..21        12-byte AES nonce
+22..31        reserved
+32..8223      AES-256-CTR ciphertext (always 8192 bytes)
+8224..8239    16-byte AES-GCM tag (skipped)
+8240..EOF     plaintext: textures and meshopt-compressed streams
+```
+
+1. **Decrypt** the first 8 KB with AES-256-CTR using WebCrypto (`src/decrypt.js`).
+2. **Decompress** every `EXT_meshopt_compression` buffer view with [meshoptimizer](https://github.com/zeux/meshoptimizer)'s decoder (`src/decompress.js`).
+3. **Validate** the result as a standard GLB (`src/glb.js`), then load it into the viewer.
+
+The decoder was written from reverse engineering; it does not ship Meshy's WASM. [NOTES.md](NOTES.md) records how the format was worked out, including the dead ends. Meshy can change the format at any time, which would break this decoder.
+
+## Privacy
+
+- Model files are processed in the browser and never uploaded.
+- **Open URL** sends requests with cookies and referrer turned off. It contacts the host in the URL, any host that host redirects to, and the host serving the model's companion files. For a Meshy page it first asks Meshy's public task endpoint for the model, then downloads the model from the host that endpoint returns, which can be a different server such as a CDN.
+- The page loads Three.js `0.169.0` from a CDN, so the first visit needs a network connection.
+- No analytics or session recording.
+
+Only convert or export models you own or have permission to use.
+
+## Limitations
+
+- Draco- and KTX2-compressed glTF files are not decoded.
+- Only `.meshy` version 1 is supported.
+- OBJ export does not include an `.mtl` file or textures.
+- Custom glTF extensions may be lost when a GLB is regenerated rather than passed through.
+- The Meshy URL resolver uses an undocumented public endpoint and can stop working without notice.
+
+## Troubleshooting
+
+| Problem | Fix |
+| --- | --- |
+| A URL fails to open | The host probably blocks cross-origin requests, or the link is private or expired. Download the file and open it locally. |
+| A glTF or OBJ loads without textures | Select the `.bin`, `.mtl` and image files together with the model, or use **Choose folder**. |
+| "Unsupported .meshy version" | The file uses a newer container than this decoder knows. Please open an issue. |
+| Nothing works when running locally | WebCrypto needs a secure origin. Serve over `http://localhost` (as `./start.sh` does) or HTTPS, not `file://` or a LAN IP. |
+| USDZ export is refused | The model has rigs, instancing, multiple materials or vertex colors. Export GLB instead. |
+| A 3MF prints at the wrong size | Set **Millimeters per model unit** to match the model's units before exporting. |
+
+## Development
+
+The site is static files with no build step. To serve it locally:
+
+```bash
 git clone https://github.com/Amal-David/meshy2glb.git
 cd meshy2glb
 ./start.sh
 ```
 
-Use HTTPS or localhost for WebCrypto. Runtime Three.js modules are pinned to `0.169.0` on a CDN; client-side processing does not mean the first visit is offline.
+This serves the repository at `http://localhost:8765/` using Python's built-in server. Set `PORT` to change the port.
 
-Node 22 is the tested development target:
+Tests need Node 22:
 
-```sh
+```bash
 npm ci
-npm test                       # dependency-free core tests; also builds extension
-npm run test:legacy             # historical real-.meshy tests; fixtures may be absent
-npm run benchmark              # writes docs/benchmark.json, all seeded trials
+npm test                         # unit tests; also builds the extension
+npm run test:legacy              # decoder tests against .meshy files in tests/fixtures/
 npx playwright install chromium
-npm run test:browser            # browser export and native archive roundtrips
-npm run build:extension         # dist-extension/, load unpacked in Chrome
+npm run test:browser             # end-to-end export tests in Chromium
+npm run benchmark                # paint cleanup benchmark, writes docs/benchmark.json
 ```
 
-The benchmark checks the upstream reference worker's Git blob hash before executing it. CI publishes benchmark JSON, browser traces/screenshots and the built extension as artifacts. Development dependencies are pinned through the committed npm lockfile.
+`tests/fixtures/` is git-ignored, so the `.meshy` fixture tests skip unless you add your own files there or point `MESHY_FIXTURES` at a folder of them.
 
-## Architecture
+CI runs all of the above on every push and pull request ([test.yml](.github/workflows/test.yml)). Pushing to `main` publishes the site through GitHub Pages; a second workflow ([pages-smoke.yml](.github/workflows/pages-smoke.yml)) then checks that the live files match the commit. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
+## Project structure
 
 ```text
-src/input.js, model-loader.js   URL/file/resource resolution
-src/glb.js, decrypt.js,
-  decompress.js                validated binary conversion
-src/viewer.js                  independent preview scene/materials
-src/export.js                  explicit export routes
-src/snapshot.js, discovery.js  shared geometry capture and bounded discovery
-src/paint-core.js, binary-cut.js
-src/contours.js, surface.js     independent paint algorithms
-src/paint-adapter.js            Three.js and native 3MF adapters
-src/vendor/three-mf/            attributed upstream slicer-format writer
-extension/                     optional active-tab geometry exporter
-scripts/benchmark.mjs           comparative cleanup experiment
-scripts/check-pages.py         public deployment verification
+index.html                 App page
+src/
+  app.js                   UI wiring
+  input.js                 File, folder and URL input
+  model-loader.js          Picks a loader and resolves companion files
+  decrypt.js               .meshy → GLB (AES-256-CTR)
+  decompress.js            meshopt decompression
+  glb.js                   GLB parsing and validation
+  viewer.js                Three.js preview scene
+  export.js                Export routes for each format
+  snapshot.js              Bakes visible geometry into a static mesh
+  discovery.js             Finds Three.js scenes on a page (extension)
+  paint-core.js            Palette fitting and label cleanup
+  binary-cut.js            Min-cut solver for two-color cleanup
+  contours.js, surface.js  Splits the mesh along color boundaries
+  paint-adapter.js         Three.js and 3MF output for painted models
+  vendor/three-mf/         3MF writer from Texture2Paint (MIT)
+extension/                 Chrome extension source
+scripts/                   Extension build, benchmark, Pages check
+tests/                     Unit, legacy decoder and Playwright tests
+docs/                      Longer documentation
 ```
 
-No analytics, session recording or asset uploads are added. URL import contacts the selected source; the website loads pinned libraries from a CDN. Conversion happens on-device. Only use models you own or have permission to convert/export.
+## Documentation
 
-## Credits and license
+| Document | Contents |
+| --- | --- |
+| [docs/ALGORITHM.md](docs/ALGORITHM.md) | Texture-to-paint method, limits and benchmark |
+| [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) | URL import, Asset Lens and the Chrome extension |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | GitHub Pages setup and live-site check |
+| [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md) | Reused code, licenses and attributions |
+| [NOTES.md](NOTES.md) | How the `.meshy` format was reverse engineered |
 
-This project is MIT licensed. See [THIRD_PARTY.md](docs/THIRD_PARTY.md) for exact reused code, pinned upstream revision, author credits and licenses. Integrations draw on Asset Lens, MeshySec and the original meshy2glb ecosystem; our decoder does not ship Meshy's proprietary WASM. Historical format investigation remains in [NOTES.md](NOTES.md), which is not a current compatibility or performance guarantee.
+## Credits
 
-Not affiliated with Meshy AI. Upstream changes can affect `.meshy` compatibility and the experimental public-page resolver.
+- [three.js](https://threejs.org/): rendering, loaders and exporters (MIT)
+- [meshoptimizer](https://github.com/zeux/meshoptimizer): mesh decompression (MIT)
+- [Texture2Paint](https://github.com/EllsworOpan/Texture2Paint): 3MF writer and cleanup reference (MIT)
+- [Oklab](https://bottosson.github.io/posts/oklab/) by Björn Ottosson: color space for palette fitting
+- [youssef02/meshy2glb](https://github.com/youssef02/meshy2glb), [Pouare514/meshy-downloader](https://github.com/Pouare514/meshy-downloader), [MeshySec](https://github.com/imluri/MeshySec) and [meshy-glb-downloader](https://github.com/Shuvam-Banerji-Seal/meshy-glb-downloader): earlier tools and ideas
+
+Full details are in [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md).
+
+Not affiliated with Meshy AI.
+
+## License
+
+[MIT](LICENSE)
